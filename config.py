@@ -42,8 +42,14 @@ WALK_TO_IDLE_MAX_MS: int = 5_000
 # ---------------------------------------------------------------------------
 
 WALK_SPEED_PX: int = 3
+CLIMB_SPEED_PX: int = 4
 GRAVITY_PX: int = 8
 FALL_TICK_MS: int = 16
+SURFACE_REFRESH_MS: int = 400
+
+# Minimum window size to treat as a climbable surface (Windows).
+MIN_WINDOW_WIDTH: int = 120
+MIN_WINDOW_HEIGHT: int = 80
 
 # ---------------------------------------------------------------------------
 # Fallback rendering (used when sprite files are missing)

@@ -1,0 +1,247 @@
+"""Walkable surfaces derived from on-screen windows (Windows) or screen floor only."""
+
+from __future__ import annotations
+
+import sys
+from dataclasses import dataclass
+from typing import Literal
+
+from PyQt6.QtCore import QRect
+
+from config import MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, PET_HEIGHT, PET_WIDTH
+
+Side = Literal["left", "right"]
+
+
+@dataclass(frozen=True)
+class HorizontalLedge:
+    """A horizontal surface the pet can stand on."""
+
+    left: int
+    right: int  # right edge of the ledge in screen coordinates
+    stand_y: int  # pet widget top-left y when standing here
+    ledge_id: str
+    hwnd: int = 0  # 0 for the screen floor
+
+    def contains_pet_x(self, pet_x: int) -> bool:
+        return self.left <= pet_x <= self.right - PET_WIDTH
+
+
+@dataclass(frozen=True)
+class VerticalLedge:
+    """A vertical window edge the pet can climb."""
+
+    edge_x: int
+    top: int
+    bottom: int
+    side: Side
+    hwnd: int
+
+    def pet_x(self) -> int:
+        overlap = 6
+        if self.side == "left":
+            return self.edge_x - PET_WIDTH + overlap
+        return self.edge_x - overlap
+
+    def pet_overlaps_height(self, pet_top: int, pet_bottom: int) -> bool:
+        margin = 8
+        return pet_bottom > self.top + margin and pet_top < self.bottom - margin
+
+
+class SurfaceTracker:
+    """
+    Collects horizontal and vertical ledges from visible desktop windows.
+
+    On non-Windows platforms only the screen floor ledge is available.
+    """
+
+    def __init__(self) -> None:
+        self._horizontal: list[HorizontalLedge] = []
+        self._vertical: list[VerticalLedge] = []
+        self._enabled = sys.platform == "win32"
+        if self._enabled:
+            self._init_win32()
+
+    def refresh(self, play_area: QRect, exclude_hwnd: int = 0) -> None:
+        """Rebuild ledge lists for the current play area and window layout."""
+        floor = HorizontalLedge(
+            left=play_area.left(),
+            right=play_area.right(),
+            stand_y=play_area.bottom() - PET_HEIGHT + 1,
+            ledge_id="screen",
+        )
+        self._horizontal = [floor]
+        self._vertical = []
+
+        if not self._enabled:
+            return
+
+        for hwnd, rect in self._enumerate_windows(exclude_hwnd):
+            width = rect.right - rect.left
+            height = rect.bottom - rect.top
+            if width < MIN_WINDOW_WIDTH or height < MIN_WINDOW_HEIGHT:
+                continue
+            if rect.bottom <= play_area.top() or rect.top >= play_area.bottom():
+                continue
+
+            ledge_id = f"hwnd:{hwnd}"
+            self._horizontal.append(
+                HorizontalLedge(
+                    left=rect.left,
+                    right=rect.right,
+                    stand_y=rect.top - PET_HEIGHT + 1,
+                    ledge_id=ledge_id,
+                    hwnd=hwnd,
+                )
+            )
+            self._vertical.append(
+                VerticalLedge(
+                    edge_x=rect.left,
+                    top=rect.top,
+                    bottom=rect.bottom,
+                    side="left",
+                    hwnd=hwnd,
+                )
+            )
+            self._vertical.append(
+                VerticalLedge(
+                    edge_x=rect.right,
+                    top=rect.top,
+                    bottom=rect.bottom,
+                    side="right",
+                    hwnd=hwnd,
+                )
+            )
+
+    def horizontal_ledges(self) -> list[HorizontalLedge]:
+        return self._horizontal
+
+    def vertical_ledges(self) -> list[VerticalLedge]:
+        return self._vertical
+
+    def floor_ledge(self, play_area: QRect) -> HorizontalLedge:
+        return HorizontalLedge(
+            left=play_area.left(),
+            right=play_area.right(),
+            stand_y=play_area.bottom() - PET_HEIGHT + 1,
+            ledge_id="screen",
+        )
+
+    def find_ledge_at(self, pet_x: int, pet_y: int) -> HorizontalLedge | None:
+        """Return the highest ledge supporting the pet at the given position."""
+        feet_y = pet_y + PET_HEIGHT - 1
+        best: HorizontalLedge | None = None
+        for ledge in self._horizontal:
+            if not ledge.contains_pet_x(pet_x):
+                continue
+            surface_feet = ledge.stand_y + PET_HEIGHT - 1
+            if abs(feet_y - surface_feet) <= 4:
+                if best is None or ledge.stand_y < best.stand_y:
+                    best = ledge
+        return best
+
+    def find_landing_ledge(
+        self, pet_x: int, pet_y: int, next_feet_y: int
+    ) -> HorizontalLedge | None:
+        """Pick the topmost ledge the pet would land on while falling."""
+        current_feet = pet_y + PET_HEIGHT - 1
+        best: HorizontalLedge | None = None
+        for ledge in self._horizontal:
+            if not ledge.contains_pet_x(pet_x):
+                continue
+            surface_feet = ledge.stand_y + PET_HEIGHT - 1
+            if current_feet <= surface_feet <= next_feet_y:
+                if best is None or ledge.stand_y < best.stand_y:
+                    best = ledge
+        return best
+
+    def climb_candidate(
+        self,
+        pet_x: int,
+        pet_top: int,
+        pet_bottom: int,
+        direction: int,
+        next_x: int,
+        standing_on_hwnd: int = 0,
+    ) -> VerticalLedge | None:
+        """Return a vertical edge the pet should start climbing, if any."""
+        tolerance = 4
+        candidates: list[VerticalLedge] = []
+        for ledge in self._vertical:
+            if ledge.hwnd == standing_on_hwnd:
+                continue
+            if not ledge.pet_overlaps_height(pet_top, pet_bottom):
+                continue
+            if direction > 0 and ledge.side == "left":
+                if next_x + PET_WIDTH >= ledge.edge_x - tolerance:
+                    if pet_x + PET_WIDTH <= ledge.edge_x + tolerance:
+                        candidates.append(ledge)
+            elif direction < 0 and ledge.side == "right":
+                if next_x <= ledge.edge_x + tolerance:
+                    if pet_x >= ledge.edge_x - tolerance:
+                        candidates.append(ledge)
+        if not candidates:
+            return None
+        if direction > 0:
+            return min(candidates, key=lambda item: item.edge_x)
+        return max(candidates, key=lambda item: item.edge_x)
+
+    def vertical_for_window(self, hwnd: int, side: Side) -> VerticalLedge | None:
+        for ledge in self._vertical:
+            if ledge.hwnd == hwnd and ledge.side == side:
+                return ledge
+        return None
+
+    # ------------------------------------------------------------------
+    # Win32 enumeration
+    # ------------------------------------------------------------------
+
+    def _init_win32(self) -> None:
+        import ctypes
+        from ctypes import wintypes
+
+        self._ctypes = ctypes
+        self._user32 = ctypes.windll.user32
+        self._wintypes = wintypes
+
+        class RECT(ctypes.Structure):
+            _fields_ = [
+                ("left", ctypes.c_long),
+                ("top", ctypes.c_long),
+                ("right", ctypes.c_long),
+                ("bottom", ctypes.c_long),
+            ]
+
+        self._RECT = RECT
+        self._WNDENUMPROC = ctypes.WINFUNCTYPE(
+            wintypes.BOOL, wintypes.HWND, wintypes.LPARAM
+        )
+
+    def _enumerate_windows(self, exclude_hwnd: int) -> list[tuple[int, object]]:
+        import ctypes
+
+        results: list[tuple[int, object]] = []
+
+        def callback(hwnd: int, _lparam: int) -> bool:
+            if hwnd == exclude_hwnd:
+                return True
+            if not self._user32.IsWindowVisible(hwnd):
+                return True
+            if self._user32.IsIconic(hwnd):
+                return True
+
+            rect = self._RECT()
+            if not self._user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                return True
+
+            width = rect.right - rect.left
+            height = rect.bottom - rect.top
+            if width <= 0 or height <= 0:
+                return True
+
+            results.append((int(hwnd), rect))
+            return True
+
+        proc = self._WNDENUMPROC(callback)
+        self._user32.EnumWindows(proc, 0)
+        return results
