@@ -16,7 +16,7 @@ The pet lives in a frameless, transparent, always-on-top window. It idles, walks
 python -m venv .venv
 
 # Windows
-.venv\Scripts\activate
+source .venv\Scripts\activate
 
 # macOS / Linux
 source .venv/bin/activate
