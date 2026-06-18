@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import QWidget
 from config import (
     ANIMATION_INTERVAL_MS,
     ASSETS_DIR,
+    CLIMB_SPEED_PX,
     FALLBACK_BODY_COLOR,
     FALLBACK_EYE_COLOR,
     FALLBACK_OUTLINE_COLOR,
@@ -33,9 +34,11 @@ from config import (
     PET_HEIGHT,
     PET_WIDTH,
     SPRITE_FILES,
+    SURFACE_REFRESH_MS,
     WALK_SPEED_PX,
 )
 from states import PetState, PetStateMachine
+from surfaces import HorizontalLedge, SurfaceTracker, VerticalLedge
 
 
 def _is_background_pixel(color: QColor, threshold: int = 200) -> bool:
@@ -137,6 +140,7 @@ class SpriteCache:
         mapping = {
             PetState.IDLE: "idle",
             PetState.WALKING: "walk",
+            PetState.CLIMBING: "walk",
             PetState.FALLING: "fall",
             PetState.DRAGGED: "drag",
         }
@@ -161,6 +165,11 @@ class PetWindow(QWidget):
         self._drag_offset = QPoint(0, 0)
         self._is_dragging: bool = False
         self._play_area: QRect = QRect()
+        self._exclude_hwnd: int = 0
+        self._surfaces = SurfaceTracker()
+        self._active_ledge: HorizontalLedge | None = None
+        self._climb_ledge: VerticalLedge | None = None
+        self._climb_direction: int = -1  # -1 = up, 1 = down
 
         self._fsm = PetStateMachine(self._on_fsm_state_changed, parent=self)
 
@@ -196,8 +205,13 @@ class PetWindow(QWidget):
 
         self._move_timer = QTimer(self)
         self._move_timer.setInterval(FALL_TICK_MS)
-        self._move_timer.timeout.connect(self._on_walk_tick)
+        self._move_timer.timeout.connect(self._on_movement_tick)
         self._move_timer.start()
+
+        self._surface_timer = QTimer(self)
+        self._surface_timer.setInterval(SURFACE_REFRESH_MS)
+        self._surface_timer.timeout.connect(self._refresh_surfaces)
+        self._surface_timer.start()
 
     def _place_on_floor_centered(self) -> None:
         self._refresh_play_area()
@@ -207,15 +221,23 @@ class PetWindow(QWidget):
 
     def _refresh_play_area(self) -> None:
         """Use available geometry so the pet rests above the taskbar/dock."""
-        screen = QGuiApplication.primaryScreen()
+        screen = QGuiApplication.screenAt(self.pos())
+        if screen is None:
+            screen = QGuiApplication.primaryScreen()
         if screen is None:
             self._play_area = QRect(0, 0, 1920, 1080)
             return
         self._play_area = screen.availableGeometry()
 
+    def _refresh_surfaces(self) -> None:
+        self._refresh_play_area()
+        self._surfaces.refresh(self._play_area, self._exclude_hwnd)
+
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
-        self._refresh_play_area()
+        self._exclude_hwnd = int(self.winId())
+        self._refresh_surfaces()
+        self._active_ledge = self._surfaces.floor_ledge(self._play_area)
 
     # ------------------------------------------------------------------
     # State machine callbacks
@@ -241,48 +263,140 @@ class PetWindow(QWidget):
             self._frame_index = (self._frame_index + 1) % len(frames)
         self.update()
 
-    def _on_walk_tick(self) -> None:
-        if self._fsm.state != PetState.WALKING or self._is_dragging:
+    def _on_movement_tick(self) -> None:
+        if self._is_dragging:
             return
-        self._refresh_play_area()
+        self._refresh_surfaces()
+        if self._fsm.state == PetState.WALKING:
+            self._horizontal_walk_tick()
+        elif self._fsm.state == PetState.CLIMBING:
+            self._climb_tick()
+
+    def _horizontal_walk_tick(self) -> None:
         pos = self.pos()
-        new_x = pos.x() + WALK_SPEED_PX * self._fsm.direction
+        direction = self._fsm.direction
+        new_x = pos.x() + WALK_SPEED_PX * direction
+        pet_top = pos.y()
+        pet_bottom = pos.y() + PET_HEIGHT
 
-        left_bound = self._play_area.left()
-        right_bound = self._play_area.right() - PET_WIDTH + 1
+        ledge = self._active_ledge
+        if ledge is None:
+            ledge = self._surfaces.floor_ledge(self._play_area)
+            self._active_ledge = ledge
 
-        if new_x <= left_bound:
-            new_x = left_bound
+        climb = self._surfaces.climb_candidate(
+            pos.x(),
+            pet_top,
+            pet_bottom,
+            direction,
+            new_x,
+            standing_on_hwnd=ledge.hwnd,
+        )
+        if climb is not None:
+            self._start_climb(climb, direction=-1)
+            return
+
+        pet_left_min = ledge.left
+        pet_left_max = ledge.right - PET_WIDTH
+
+        if new_x < pet_left_min:
+            if ledge.ledge_id != "screen" and direction < 0:
+                vertical = self._surfaces.vertical_for_window(ledge.hwnd, "left")
+                if vertical is not None:
+                    self._start_climb(vertical, direction=1)
+                    return
+            if ledge.ledge_id != "screen":
+                self._start_fall()
+                return
+            new_x = self._play_area.left()
             self._fsm.set_direction(1)
             self._fsm.notify_boundary_hit()
-        elif new_x >= right_bound:
-            new_x = right_bound
+        elif new_x > pet_left_max:
+            if ledge.ledge_id != "screen":
+                self._start_fall()
+                return
+            new_x = self._play_area.right() - PET_WIDTH + 1
             self._fsm.set_direction(-1)
             self._fsm.notify_boundary_hit()
-        else:
-            self.move(new_x, pos.y())
+
+        self.move(new_x, ledge.stand_y)
+
+    def _climb_tick(self) -> None:
+        climb = self._climb_ledge
+        if climb is None:
+            self._start_fall()
             return
 
-        self.move(new_x, pos.y())
+        pos = self.pos()
+        pet_x = climb.pet_x()
+
+        if self._climb_direction < 0:
+            new_y = pos.y() - CLIMB_SPEED_PX
+            if new_y <= climb.top - PET_HEIGHT + 8:
+                top_ledge = self._horizontal_ledge_for_hwnd(climb.hwnd)
+                if top_ledge is None:
+                    self._start_fall()
+                    return
+                self._active_ledge = top_ledge
+                land_x = max(
+                    top_ledge.left,
+                    min(pet_x, top_ledge.right - PET_WIDTH),
+                )
+                self.move(land_x, top_ledge.stand_y)
+                self._climb_ledge = None
+                self._fsm.force_state(PetState.WALKING)
+            else:
+                self.move(pet_x, new_y)
+            return
+
+        new_y = pos.y() + CLIMB_SPEED_PX
+        if new_y + PET_HEIGHT >= climb.bottom - 4:
+            floor = self._surfaces.floor_ledge(self._play_area)
+            self._active_ledge = floor
+            land_x = max(floor.left, min(pet_x, floor.right - PET_WIDTH))
+            self.move(land_x, floor.stand_y)
+            self._climb_ledge = None
+            self._fsm.force_state(PetState.WALKING)
+        else:
+            self.move(pet_x, new_y)
+
+    def _horizontal_ledge_for_hwnd(self, hwnd: int) -> HorizontalLedge | None:
+        for ledge in self._surfaces.horizontal_ledges():
+            if ledge.hwnd == hwnd:
+                return ledge
+        return None
+
+    def _start_climb(self, vertical: VerticalLedge, direction: int) -> None:
+        self._climb_ledge = vertical
+        self._climb_direction = -1 if direction < 0 else 1
+        self.move(vertical.pet_x(), self.pos().y())
+        self._fsm.force_state(PetState.CLIMBING)
+
+    def _start_fall(self) -> None:
+        self._active_ledge = None
+        self._climb_ledge = None
+        self._fsm.force_state(PetState.FALLING)
 
     def _on_fall_tick(self) -> None:
         if self._fsm.state != PetState.FALLING:
             return
-        self._refresh_play_area()
-        floor_y = self._play_area.bottom() - PET_HEIGHT + 1
-        new_y = self.pos().y() + GRAVITY_PX
-        if new_y >= floor_y:
-            self.move(self.pos().x(), floor_y)
+        self._refresh_surfaces()
+        pos = self.pos()
+        new_y = pos.y() + GRAVITY_PX
+        next_feet_y = new_y + PET_HEIGHT - 1
+        landing = self._surfaces.find_landing_ledge(pos.x(), pos.y(), next_feet_y)
+        if landing is not None:
+            self.move(pos.x(), landing.stand_y)
+            self._active_ledge = landing
             self._fall_timer.stop()
             self._fsm.resume()
             self._fsm.force_state(PetState.IDLE)
         else:
-            self.move(self.pos().x(), new_y)
+            self.move(pos.x(), new_y)
 
-    def _is_on_floor(self) -> bool:
-        self._refresh_play_area()
-        floor_y = self._play_area.bottom() - PET_HEIGHT + 1
-        return self.pos().y() >= floor_y
+    def _is_on_support(self) -> bool:
+        self._refresh_surfaces()
+        return self._surfaces.find_ledge_at(self.pos().x(), self.pos().y()) is not None
 
     # ------------------------------------------------------------------
     # Mouse interaction
@@ -296,6 +410,7 @@ class PetWindow(QWidget):
         self._fsm.pause()
         self._fsm.force_state(PetState.DRAGGED)
         self._fall_timer.stop()
+        self._climb_ledge = None
         event.accept()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
@@ -310,9 +425,12 @@ class PetWindow(QWidget):
             return
         self._is_dragging = False
         self._fsm.resume()
-        if self._is_on_floor():
+        if self._is_on_support():
+            ledge = self._surfaces.find_ledge_at(self.pos().x(), self.pos().y())
+            self._active_ledge = ledge
             self._fsm.force_state(PetState.IDLE)
         else:
+            self._active_ledge = None
             self._fsm.force_state(PetState.FALLING)
         event.accept()
 
@@ -372,7 +490,7 @@ class PetWindow(QWidget):
         scale_y = 1.0
         if self._fsm.state == PetState.FALLING:
             scale_y = 1.12
-        elif self._fsm.state == PetState.WALKING:
+        elif self._fsm.state in (PetState.WALKING, PetState.CLIMBING):
             scale_y = 0.95
 
         painter.save()
@@ -398,7 +516,7 @@ class PetWindow(QWidget):
             painter.drawEllipse(QPoint(int(ex + pupil_dx), eye_y + 1), 3, 4)
 
         # Simple feet for walk animation alternation.
-        if self._fsm.state == PetState.WALKING:
+        if self._fsm.state in (PetState.WALKING, PetState.CLIMBING):
             painter.setPen(QPen(outline, 2))
             painter.setBrush(QBrush(body))
             step = 4 if self._frame_index % 2 == 0 else -4

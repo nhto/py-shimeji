@@ -22,6 +22,7 @@ class PetState(Enum):
 
     IDLE = auto()
     WALKING = auto()
+    CLIMBING = auto()
     FALLING = auto()
     DRAGGED = auto()
 
@@ -95,7 +96,7 @@ class PetStateMachine(QObject):
     # ------------------------------------------------------------------
 
     def _on_behavior_tick(self) -> None:
-        if self._paused or self._state in (PetState.DRAGGED, PetState.FALLING):
+        if self._paused or self._state in (PetState.DRAGGED, PetState.FALLING, PetState.CLIMBING):
             return
 
         self._next_idle_walk_ms -= BEHAVIOR_INTERVAL_MS
