@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import sys
 
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QSystemTrayIcon
 
 from pet_window import PetWindow
+from tray import SystemTray
 
 
 def main() -> int:
@@ -16,6 +17,9 @@ def main() -> int:
 
     pet = PetWindow()
     pet.show()
+
+    if QSystemTrayIcon.isSystemTrayAvailable():
+        SystemTray(app, pet)
 
     return app.exec()
 
