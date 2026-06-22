@@ -33,7 +33,9 @@ def main() -> int:
 
     if QSystemTrayIcon.isSystemTrayAvailable():
         app.setQuitOnLastWindowClosed(False)
-        SystemTray(app, pets)
+        tray = SystemTray(app, pets)
+        for pet in pets:
+            pet.set_context_menu_handler(tray.show_context_menu)
     elif not any(pet.isVisible() for pet in pets):
         return 0
 

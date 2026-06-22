@@ -99,6 +99,11 @@ class PetStateMachine(QObject):
         self._next_idle_walk_ms = self._random_walk_duration()
         self._transition(PetState.WALKING)
 
+    def begin_sit(self) -> None:
+        """Sit in place until the sit timer expires (e.g. user right-click)."""
+        self._next_idle_walk_ms = self._random_sit_duration()
+        self._transition(PetState.SIT)
+
     def notify_boundary_hit(self) -> None:
         """Called when the pet reaches a horizontal screen edge while walking."""
         if self._state == PetState.WALKING:
