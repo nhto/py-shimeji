@@ -46,11 +46,11 @@ class PetStateMachine(QObject):
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
-        self._state: PetState = PetState.IDLE
+        self._state: PetState = PetState.WALKING
         self._direction: int = 1  # 1 = right, -1 = left
         self._on_state_changed = on_state_changed
         self._paused: bool = False
-        self._next_idle_walk_ms: int = self._random_idle_duration()
+        self._next_idle_walk_ms: int = self._random_walk_duration()
         self._next_sit_ms: int = self._random_idle_to_sit_duration()
 
         self._behavior_timer = QTimer(self)
@@ -94,11 +94,15 @@ class PetStateMachine(QObject):
             self._reset_idle_timers()
         self._transition(new_state)
 
+    def begin_walking(self) -> None:
+        """Resume horizontal movement with a fresh walk duration."""
+        self._next_idle_walk_ms = self._random_walk_duration()
+        self._transition(PetState.WALKING)
+
     def notify_boundary_hit(self) -> None:
         """Called when the pet reaches a horizontal screen edge while walking."""
         if self._state == PetState.WALKING:
-            self._transition(PetState.IDLE)
-            self._reset_idle_timers()
+            self._next_idle_walk_ms = self._random_walk_duration()
 
     # ------------------------------------------------------------------
     # Internal behavior loop
@@ -130,8 +134,9 @@ class PetStateMachine(QObject):
         if self._state == PetState.SIT:
             self._next_idle_walk_ms -= BEHAVIOR_INTERVAL_MS
             if self._next_idle_walk_ms <= 0:
-                self._transition(PetState.IDLE)
-                self._reset_idle_timers()
+                self._transition(PetState.WALKING)
+                self._next_idle_walk_ms = self._random_walk_duration()
+                self._next_sit_ms = self._random_idle_to_sit_duration()
             return
 
         if self._state == PetState.WALKING:

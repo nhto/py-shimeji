@@ -34,16 +34,18 @@ PET_HEIGHT: int = 64
 # Timers (milliseconds)
 # ---------------------------------------------------------------------------
 
+TOP_PERCH_MARGIN_PX: int = 80
+
 ANIMATION_INTERVAL_MS: int = 120
 BEHAVIOR_INTERVAL_MS: int = 500
-IDLE_TO_WALK_MIN_MS: int = 3_000
-IDLE_TO_WALK_MAX_MS: int = 8_000
-WALK_TO_IDLE_MIN_MS: int = 2_000
-WALK_TO_IDLE_MAX_MS: int = 5_000
-IDLE_TO_SIT_MIN_MS: int = 12_000
-IDLE_TO_SIT_MAX_MS: int = 25_000
-SIT_TO_IDLE_MIN_MS: int = 5_000
-SIT_TO_IDLE_MAX_MS: int = 12_000
+IDLE_TO_WALK_MIN_MS: int = 1_000
+IDLE_TO_WALK_MAX_MS: int = 2_500
+WALK_TO_IDLE_MIN_MS: int = 1_000
+WALK_TO_IDLE_MAX_MS: int = 2_500
+IDLE_TO_SIT_MIN_MS: int = 20_000
+IDLE_TO_SIT_MAX_MS: int = 40_000
+SIT_TO_IDLE_MIN_MS: int = 2_000
+SIT_TO_IDLE_MAX_MS: int = 4_000
 
 # ---------------------------------------------------------------------------
 # Movement & physics
