@@ -8,6 +8,7 @@ from PyQt6.QtCore import QPoint, Qt
 from PyQt6.QtGui import QAction, QBrush, QColor, QIcon, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMenu, QSystemTrayIcon
 
+from chat_window import ChatWindow
 from config import FALLBACK_BODY_COLOR, FALLBACK_OUTLINE_COLOR, get_pet_sprites_dir
 from pet_window import PetWindow
 
@@ -69,6 +70,12 @@ class SystemTray:
 
         menu.addSeparator()
 
+        chat_action = QAction("Chat with bubu", menu)
+        chat_action.triggered.connect(self._open_chat)
+        menu.addAction(chat_action)
+
+        menu.addSeparator()
+
         self._click_through_action = QAction("Click-through (pass mouse clicks)", menu)
         self._click_through_action.setCheckable(True)
         self._click_through_action.setChecked(False)
@@ -85,13 +92,23 @@ class SystemTray:
         menu.addAction(quit_action)
 
         self._menu = menu
+        self._menu_host_pet: PetWindow | None = None
+        menu.aboutToHide.connect(self._on_menu_closed)
         self._tray.setContextMenu(menu)
         self._tray.show()
 
-    def show_context_menu(self, global_pos: QPoint) -> None:
+    def show_context_menu(self, global_pos: QPoint, pet: PetWindow | None = None) -> None:
         """Show the app menu at a screen position (e.g. pet right-click)."""
+        if self._menu_host_pet is not None and self._menu_host_pet is not pet:
+            self._menu_host_pet.end_menu_hold()
+        self._menu_host_pet = pet
         self._refresh_menu_state()
         self._menu.popup(global_pos)
+
+    def _on_menu_closed(self) -> None:
+        if self._menu_host_pet is not None:
+            self._menu_host_pet.end_menu_hold()
+            self._menu_host_pet = None
 
     def _refresh_menu_state(self) -> None:
         for index, pet in enumerate(self._pets, start=1):
@@ -139,6 +156,11 @@ class SystemTray:
     def _set_click_through(self, enabled: bool) -> None:
         for pet in self._pets:
             pet.set_click_through(enabled)
+
+    def _open_chat(self) -> None:
+        pet = self._menu_host_pet or (self._pets[0] if self._pets else None)
+        parent = self._pets[0] if self._pets else None
+        ChatWindow.open_chat(parent, pet=pet)
 
     def _quit(self) -> None:
         self._tray.hide()

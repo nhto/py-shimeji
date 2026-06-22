@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import random
 from collections import deque
 from collections.abc import Callable
 from pathlib import Path
@@ -30,6 +31,9 @@ from config import (
     CLIMB_SPEED_PX,
     FALL_TICK_MS,
     GRAVITY_PX,
+    PEER_INTERACTION_Y_TOLERANCE_PX,
+    PEER_NUDGE_PX,
+    PEER_SIT_ON_BUMP_CHANCE,
     PET_FALLBACK_PALETTES,
     PET_HEIGHT,
     PET_WIDTH,
@@ -211,8 +215,11 @@ class PetWindow(QWidget):
         self._climb_ledge: VerticalLedge | None = None
         self._climb_direction: int = -1  # -1 = up, 1 = down
         self._click_through: bool = False
-        self._context_menu_handler: Callable[[QPoint], None] | None = None
+        self._context_menu_handler: Callable[[QPoint, PetWindow], None] | None = None
         self._right_click_handled: bool = False
+        self._peer_pets: list[PetWindow] = []
+        self._menu_hold: bool = False
+        self._chat_hold: bool = False
 
         self._fsm = PetStateMachine(self._on_fsm_state_changed, parent=self)
 
@@ -233,7 +240,7 @@ class PetWindow(QWidget):
         return self._click_through
 
     def set_context_menu_handler(
-        self, handler: Callable[[QPoint], None] | None
+        self, handler: Callable[[QPoint, PetWindow], None] | None
     ) -> None:
         self._context_menu_handler = handler
 
@@ -248,6 +255,92 @@ class PetWindow(QWidget):
         self._sprites.reload(sprites_dir)
         self._frame_index = 0
         self.update()
+
+    def set_peer_pets(self, peers: list[PetWindow]) -> None:
+        """Register other pets for overlap detection and nudging."""
+        self._peer_pets = peers
+
+    def handle_display_changed(self) -> None:
+        """Re-clamp position and refresh surfaces after monitor or taskbar changes."""
+        self._refresh_play_area()
+        if not self.isVisible():
+            return
+
+        pos = self.pos()
+        clamped_x, clamped_y = self._clamp_position(pos.x(), pos.y())
+        if clamped_x != pos.x() or clamped_y != pos.y():
+            self.move(clamped_x, clamped_y)
+
+        self._surfaces.refresh(self._play_area, self._exclude_hwnds)
+        if self._is_dragging:
+            return
+        if self._fsm.state in (PetState.FALLING, PetState.CLIMBING):
+            return
+        self._sync_support()
+
+    def begin_menu_hold(self) -> None:
+        """Sit still and pause behavior while the context menu is open."""
+        if self._fsm.state in (PetState.DRAGGED, PetState.FALLING):
+            return
+
+        self._menu_hold = True
+        self._enter_hold()
+
+    def end_menu_hold(self) -> None:
+        """Resume behavior after the context menu closes."""
+        if not self._menu_hold:
+            return
+        self._menu_hold = False
+        self._leave_hold_if_idle()
+
+    def begin_chat_hold(self) -> None:
+        """Sit still and pause behavior while the chat window is open."""
+        if self._fsm.state in (PetState.DRAGGED, PetState.FALLING):
+            return
+
+        self._chat_hold = True
+        self._enter_hold()
+
+    def end_chat_hold(self) -> None:
+        """Resume behavior after the chat window closes."""
+        if not self._chat_hold:
+            return
+        self._chat_hold = False
+        self._leave_hold_if_idle()
+
+    def _enter_hold(self) -> None:
+        self._climb_ledge = None
+        self._refresh_surfaces()
+        ledge = self._surfaces.find_ledge_at(self.pos().x(), self.pos().y())
+        if ledge is not None:
+            self._active_ledge = ledge
+            self.move(self._clamp_x(self.pos().x()), self._clamp_y(ledge.stand_y))
+        self._fsm.pause()
+        self._fsm.begin_sit()
+        self._frame_index = 0
+        self._anim_timer.stop()
+        self.update()
+
+    def _leave_hold_if_idle(self) -> None:
+        if self._menu_hold or self._chat_hold:
+            return
+        self._fsm.resume()
+        self._anim_timer.start()
+        self.update()
+
+    def apply_peer_nudge(self, dx: int) -> None:
+        """Shift horizontally when bumped by another pet on the same ledge."""
+        if self._fsm.state in (PetState.DRAGGED, PetState.FALLING, PetState.CLIMBING):
+            return
+
+        pos = self.pos()
+        ledge = self._active_ledge or self._surfaces.find_ledge_at(pos.x(), pos.y())
+        if ledge is None:
+            return
+
+        new_x = self._clamp_x(pos.x() + dx)
+        new_x = max(ledge.left, min(new_x, ledge.max_pet_x()))
+        self.move(new_x, self._clamp_y(ledge.stand_y))
 
     # ------------------------------------------------------------------
     # Window setup
@@ -296,14 +389,24 @@ class PetWindow(QWidget):
 
     def _refresh_play_area(self) -> None:
         """Use available geometry so the pet rests above the taskbar/dock."""
-        frame = self.frameGeometry()
-        screen = QGuiApplication.screenAt(frame.center())
+        self._refresh_play_area_at(None)
+
+    def _refresh_play_area_at(self, global_point: QPoint | None) -> None:
+        """Pick the play area for *global_point* or the pet's current position."""
+        screen: QScreen | None = None
+        if global_point is not None:
+            screen = QGuiApplication.screenAt(global_point)
+
         if screen is None:
-            screen = QGuiApplication.screenAt(frame.topLeft())
-        if screen is None:
-            screen = self._nearest_screen(frame.center())
-        if screen is None:
-            screen = QGuiApplication.primaryScreen()
+            frame = self.frameGeometry()
+            screen = QGuiApplication.screenAt(frame.center())
+            if screen is None:
+                screen = QGuiApplication.screenAt(frame.topLeft())
+            if screen is None:
+                screen = self._nearest_screen(frame.center())
+            if screen is None:
+                screen = QGuiApplication.primaryScreen()
+
         if screen is None:
             self._play_area = QRect(0, 0, 1920, 1080)
             return
@@ -439,7 +542,7 @@ class PetWindow(QWidget):
     # ------------------------------------------------------------------
 
     def _on_animation_tick(self) -> None:
-        if self._fsm.state == PetState.DRAGGED:
+        if self._menu_hold or self._chat_hold or self._fsm.state == PetState.DRAGGED:
             return
         frames = self._sprites.frames_for_state(self._fsm.state)
         if frames:
@@ -447,11 +550,12 @@ class PetWindow(QWidget):
         self.update()
 
     def _on_movement_tick(self) -> None:
-        if self._is_dragging:
+        if self._is_dragging or self._menu_hold or self._chat_hold:
             return
         self._refresh_surfaces()
         if self._fsm.state == PetState.WALKING:
             self._horizontal_walk_tick()
+            self._handle_peer_interactions()
         elif self._fsm.state == PetState.CLIMBING:
             self._climb_tick()
 
@@ -505,6 +609,68 @@ class PetWindow(QWidget):
 
         new_x = self._clamp_x(new_x)
         self.move(new_x, self._clamp_y(ledge.stand_y))
+
+    def _nudge_on_ledge(self, dx: int) -> None:
+        """Move horizontally while staying on the current ledge."""
+        pos = self.pos()
+        ledge = self._active_ledge or self._surfaces.find_ledge_at(pos.x(), pos.y())
+        if ledge is None:
+            return
+
+        new_x = self._clamp_x(pos.x() + dx)
+        new_x = max(ledge.left, min(new_x, ledge.max_pet_x()))
+        self.move(new_x, self._clamp_y(ledge.stand_y))
+
+    def _handle_peer_interactions(self) -> None:
+        """Bump, nudge, and turn around when walking into another pet."""
+        if self._fsm.state != PetState.WALKING or not self.isVisible():
+            return
+
+        my_rect = self.frameGeometry()
+        my_center_x = my_rect.center().x()
+        my_y = self.pos().y()
+
+        for peer in self._peer_pets:
+            if not peer.isVisible():
+                continue
+            if peer._fsm.state in (
+                PetState.DRAGGED,
+                PetState.FALLING,
+                PetState.CLIMBING,
+            ):
+                continue
+            if abs(my_y - peer.pos().y()) > PEER_INTERACTION_Y_TOLERANCE_PX:
+                continue
+
+            peer_rect = peer.frameGeometry()
+            if not my_rect.intersects(peer_rect):
+                continue
+
+            if (
+                peer._fsm.state == PetState.WALKING
+                and self._pet_index >= peer._pet_index
+            ):
+                continue
+
+            peer_center_x = peer_rect.center().x()
+            dx = my_center_x - peer_center_x
+            if dx == 0:
+                dx = self._fsm.direction
+            nudge = PEER_NUDGE_PX if dx > 0 else -PEER_NUDGE_PX
+
+            self._nudge_on_ledge(nudge)
+            peer.apply_peer_nudge(-nudge)
+            self._fsm.flip_direction()
+
+            if peer._fsm.state == PetState.WALKING:
+                peer._fsm.flip_direction()
+            elif (
+                peer._fsm.state in (PetState.IDLE, PetState.SIT)
+                and random.random() < PEER_SIT_ON_BUMP_CHANCE
+            ):
+                self._fsm.begin_sit()
+
+            break
 
     def _climb_tick(self) -> None:
         climb = self._climb_ledge
@@ -616,22 +782,9 @@ class PetWindow(QWidget):
         event.accept()
 
     def _right_click_at(self, global_pos: QPoint) -> None:
-        self._sit_from_user()
+        self.begin_menu_hold()
         if self._context_menu_handler is not None:
-            self._context_menu_handler(global_pos)
-
-    def _sit_from_user(self) -> None:
-        if self._fsm.state in (PetState.DRAGGED, PetState.FALLING):
-            return
-
-        self._climb_ledge = None
-        self._refresh_surfaces()
-        ledge = self._surfaces.find_ledge_at(self.pos().x(), self.pos().y())
-        if ledge is not None:
-            self._active_ledge = ledge
-            self.move(self._clamp_x(self.pos().x()), self._clamp_y(ledge.stand_y))
-        self._fsm.begin_sit()
-        self.update()
+            self._context_menu_handler(global_pos, self)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.RightButton:
@@ -654,6 +807,7 @@ class PetWindow(QWidget):
         if not self._is_dragging:
             return
         new_pos = event.globalPosition().toPoint() - self._drag_offset
+        self._refresh_play_area_at(new_pos)
         clamped_x, clamped_y = self._clamp_position(new_pos.x(), new_pos.y())
         self.move(clamped_x, clamped_y)
         event.accept()

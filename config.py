@@ -2,7 +2,28 @@
 
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
+
+
+def _load_dotenv() -> None:
+    """Load key=value pairs from a local .env file when present."""
+    env_path = Path(__file__).resolve().parent / ".env"
+    if not env_path.is_file():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -69,6 +90,182 @@ MIN_WINDOW_HEIGHT: int = 80
 # ---------------------------------------------------------------------------
 
 MAX_PETS: int = 2
+
+# ---------------------------------------------------------------------------
+# AI chat (OpenRouter)
+# ---------------------------------------------------------------------------
+
+OPENROUTER_API_URL: str = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_API_KEY: str = os.environ.get("OPENROUTER_API_KEY", "")
+
+CHAT_MODELS: list[tuple[str, str]] = [
+    ("openrouter/owl-alpha", "Owl Alpha"),
+    ("qwen/qwen3.7-plus", "Qwen 3.7 Plus"),
+    ("deepseek/deepseek-v4-pro", "DeepSeek V4 Pro"),
+    ("xiaomi/mimo-v2.5-pro", "MiMo V2.5 Pro"),
+]
+
+CHAT_MODEL_SUPPORTS_IMAGES: frozenset[str] = frozenset(
+    {
+        "qwen/qwen3.7-plus",
+    }
+)
+
+_CHAT_SETTINGS_PATH: Path = PROJECT_ROOT / ".chat_settings.json"
+
+
+def _load_chat_settings() -> dict:
+    if _CHAT_SETTINGS_PATH.is_file():
+        try:
+            data = json.loads(_CHAT_SETTINGS_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+        except (OSError, json.JSONDecodeError, TypeError):
+            pass
+    return {}
+
+
+def _save_chat_settings(**updates: object) -> None:
+    data = _load_chat_settings()
+    data.update(updates)
+    _CHAT_SETTINGS_PATH.write_text(
+        json.dumps(data, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _valid_chat_model_ids() -> set[str]:
+    return {model_id for model_id, _ in CHAT_MODELS}
+
+
+def get_chat_model() -> str:
+    """Return the persisted chat model, or a sensible default."""
+    model = _load_chat_settings().get("model", "")
+    if isinstance(model, str) and model in _valid_chat_model_ids():
+        return model
+
+    env_model = os.environ.get("OPENROUTER_MODEL", "")
+    if env_model in _valid_chat_model_ids():
+        return env_model
+
+    return CHAT_MODELS[0][0]
+
+
+def set_chat_model(model_id: str) -> None:
+    """Persist the user's chat model choice."""
+    if model_id not in _valid_chat_model_ids():
+        return
+    _save_chat_settings(model=model_id)
+
+
+def chat_model_supports_images(model_id: str) -> bool:
+    """Return whether the model accepts image input via OpenRouter."""
+    return model_id in CHAT_MODEL_SUPPORTS_IMAGES
+
+
+CHAT_DEFAULT_LANGUAGE: str = "zh-Hant"
+
+CHAT_LANGUAGES: list[tuple[str, str]] = [
+    ("en", "English"),
+    ("zh-Hans", "Simplified Chinese"),
+    ("zh-Hant", "Traditional Chinese"),
+]
+
+CHAT_LANGUAGE_INSTRUCTIONS: dict[str, str] = {
+    "en": "Always reply in English, regardless of the language the user writes in.",
+    "zh-Hans": "Always reply in Simplified Chinese (简体中文), regardless of the language the user writes in.",
+    "zh-Hant": "Always reply in Traditional Chinese (繁體中文), regardless of the language the user writes in.",
+}
+
+CHAT_GREETINGS: dict[str, str] = {
+    "en": (
+        "Hi! I'm Bubu. Ask me anything — I'm happy to chat while I hang out on your desktop."
+    ),
+    "zh-Hans": "你好！我是 Bubu。随便问我什么吧——我很乐意一边陪你逛桌面一边聊天。",
+    "zh-Hant": "你好！我是 Bubu。隨便問我什麼吧——我很樂意一邊陪你逛桌面一邊聊天。",
+}
+
+CHAT_INPUT_PLACEHOLDERS: dict[str, str] = {
+    "en": "Say something to Bubu...",
+    "zh-Hans": "跟 Bubu 说点什么...",
+    "zh-Hant": "跟 Bubu 說點什麼...",
+}
+
+CHAT_SEND_LABELS: dict[str, str] = {
+    "en": "Send",
+    "zh-Hans": "发送",
+    "zh-Hant": "傳送",
+}
+
+CHAT_ATTACH_IMAGE_LABELS: dict[str, str] = {
+    "en": "Attach image",
+    "zh-Hans": "附加图片",
+    "zh-Hant": "附加圖片",
+}
+
+CHAT_IMAGE_ONLY_LABELS: dict[str, str] = {
+    "en": "Image",
+    "zh-Hans": "图片",
+    "zh-Hant": "圖片",
+}
+
+CHAT_IMAGE_TOO_LARGE_LABELS: dict[str, str] = {
+    "en": "Image must be 4 MB or smaller.",
+    "zh-Hans": "图片不能超过 4 MB。",
+    "zh-Hant": "圖片不能超過 4 MB。",
+}
+
+CHAT_IMAGE_UNSUPPORTED_LABELS: dict[str, str] = {
+    "en": "Please choose a PNG, JPEG, GIF, or WebP image.",
+    "zh-Hans": "请选择 PNG、JPEG、GIF 或 WebP 图片。",
+    "zh-Hant": "請選擇 PNG、JPEG、GIF 或 WebP 圖片。",
+}
+
+CHAT_MAX_IMAGE_BYTES: int = 4 * 1024 * 1024
+
+
+def _valid_chat_language_ids() -> set[str]:
+    return {lang_id for lang_id, _ in CHAT_LANGUAGES}
+
+
+def get_chat_language() -> str:
+    """Return the persisted reply language, or Traditional Chinese by default."""
+    language = _load_chat_settings().get("language", "")
+    if isinstance(language, str) and language in _valid_chat_language_ids():
+        return language
+    return CHAT_DEFAULT_LANGUAGE
+
+
+def set_chat_language(language_id: str) -> None:
+    """Persist the user's preferred reply language."""
+    if language_id not in _valid_chat_language_ids():
+        return
+    _save_chat_settings(language=language_id)
+
+
+def build_chat_system_prompt(language: str | None = None) -> str:
+    """Build the system prompt with a language-specific reply instruction."""
+    lang = language if language in _valid_chat_language_ids() else get_chat_language()
+    instruction = CHAT_LANGUAGE_INSTRUCTIONS.get(lang, CHAT_LANGUAGE_INSTRUCTIONS["en"])
+    return f"{CHAT_SYSTEM_PROMPT} {instruction}"
+
+
+CHAT_MAX_HISTORY: int = 20
+CHAT_WINDOW_WIDTH: int = 360
+CHAT_WINDOW_HEIGHT: int = 460
+CHAT_WINDOW_GAP_PX: int = 14
+CHAT_SYSTEM_PROMPT: str = (
+    "You are Bubu, a cute and playful brown bear desktop pet in the py-shimeji app. "
+    "You live on the user's screen, walk along window edges, sit, and sometimes fall. "
+    "Reply in a warm, friendly, slightly whimsical tone. Keep answers concise unless "
+    "the user asks for detail. Use simple language. You may use the occasional bear "
+    "or paw emoji, but don't overdo it."
+)
+
+# Pet-to-pet interaction while walking on the same ledge.
+PEER_INTERACTION_Y_TOLERANCE_PX: int = 16
+PEER_NUDGE_PX: int = 5
+PEER_SIT_ON_BUMP_CHANCE: float = 0.2
 
 # ---------------------------------------------------------------------------
 # Fallback rendering (used when sprite files are missing)
