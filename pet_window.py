@@ -33,6 +33,7 @@ from config import (
     PET_WIDTH,
     SPRITE_FILES,
     SURFACE_REFRESH_MS,
+    TOP_PERCH_MARGIN_PX,
     WALK_SPEED_PX,
     get_pet_sprites_dir,
 )
@@ -353,12 +354,32 @@ class PetWindow(QWidget):
             clamped_x, clamped_y = self._clamp_position(pos.x(), pos.y())
             if clamped_x != pos.x() or clamped_y != pos.y():
                 self.move(clamped_x, clamped_y)
-                if (
-                    clamped_y != pos.y()
-                    and self._fsm.state not in (PetState.FALLING, PetState.DRAGGED)
-                    and self._surfaces.find_ledge_at(clamped_x, clamped_y) is None
-                ):
-                    self._start_fall()
+            self._sync_support()
+
+    def _sync_support(self) -> None:
+        """Keep ledge state in sync; fall when the pet has no surface beneath it."""
+        if self._fsm.state in (
+            PetState.FALLING,
+            PetState.DRAGGED,
+            PetState.CLIMBING,
+        ):
+            return
+
+        pos = self.pos()
+        ledge = self._surfaces.find_ledge_at(pos.x(), pos.y())
+        if ledge is not None:
+            top_zone = self._play_area.top() + TOP_PERCH_MARGIN_PX
+            if ledge.ledge_id != "screen" and ledge.stand_y < top_zone:
+                self._active_ledge = None
+                self._start_fall()
+                return
+            self._active_ledge = ledge
+            if self._fsm.state in (PetState.IDLE, PetState.SIT):
+                self._fsm.begin_walking()
+            return
+
+        self._active_ledge = None
+        self._start_fall()
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
@@ -427,10 +448,11 @@ class PetWindow(QWidget):
         pet_top = pos.y()
         pet_bottom = pos.y() + PET_HEIGHT
 
-        ledge = self._active_ledge
+        ledge = self._surfaces.find_ledge_at(pos.x(), pos.y())
         if ledge is None:
-            ledge = self._surfaces.floor_ledge(self._play_area)
-            self._active_ledge = ledge
+            self._start_fall()
+            return
+        self._active_ledge = ledge
 
         climb = self._surfaces.climb_candidate(
             pos.x(),
@@ -445,7 +467,7 @@ class PetWindow(QWidget):
             return
 
         pet_left_min = ledge.left
-        pet_left_max = ledge.right - PET_WIDTH
+        pet_left_max = ledge.max_pet_x()
 
         if new_x < pet_left_min:
             if ledge.ledge_id != "screen" and direction < 0:
@@ -491,12 +513,12 @@ class PetWindow(QWidget):
                 land_x = self._clamp_x(
                     max(
                         top_ledge.left,
-                        min(pet_x, top_ledge.right - PET_WIDTH),
+                        min(pet_x, top_ledge.max_pet_x()),
                     )
                 )
                 self.move(land_x, self._clamp_y(top_ledge.stand_y))
                 self._climb_ledge = None
-                self._fsm.force_state(PetState.WALKING)
+                self._fsm.begin_walking()
             elif new_y <= self._min_pet_y():
                 self.move(pet_x, self._min_pet_y())
                 self._climb_ledge = None
@@ -510,11 +532,11 @@ class PetWindow(QWidget):
             floor = self._surfaces.floor_ledge(self._play_area)
             self._active_ledge = floor
             land_x = self._clamp_x(
-                max(floor.left, min(pet_x, floor.right - PET_WIDTH))
+                max(floor.left, min(pet_x, floor.max_pet_x()))
             )
             self.move(land_x, self._clamp_y(floor.stand_y))
             self._climb_ledge = None
-            self._fsm.force_state(PetState.WALKING)
+            self._fsm.begin_walking()
         else:
             self.move(pet_x, new_y)
 
@@ -549,7 +571,7 @@ class PetWindow(QWidget):
             self._active_ledge = landing
             self._fall_timer.stop()
             self._fsm.resume()
-            self._fsm.force_state(PetState.IDLE)
+            self._fsm.begin_walking()
         elif next_feet_y >= self._play_area.bottom():
             floor = self._surfaces.floor_ledge(self._play_area)
             land_x = self._clamp_x(pos.x())
@@ -557,7 +579,7 @@ class PetWindow(QWidget):
             self._active_ledge = floor
             self._fall_timer.stop()
             self._fsm.resume()
-            self._fsm.force_state(PetState.IDLE)
+            self._fsm.begin_walking()
         else:
             self.move(self._clamp_x(pos.x()), self._clamp_y(new_y))
 
@@ -596,7 +618,7 @@ class PetWindow(QWidget):
         if self._is_on_support():
             ledge = self._surfaces.find_ledge_at(self.pos().x(), self.pos().y())
             self._active_ledge = ledge
-            self._fsm.force_state(PetState.IDLE)
+            self._fsm.begin_walking()
         else:
             self._active_ledge = None
             self._fsm.force_state(PetState.FALLING)
