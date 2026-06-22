@@ -69,6 +69,17 @@ class SystemTray:
 
         menu.addSeparator()
 
+        self._click_through_action = QAction("Click-through (pass mouse clicks)", menu)
+        self._click_through_action.setCheckable(True)
+        self._click_through_action.setChecked(False)
+        self._click_through_action.setToolTip(
+            "When enabled, pets ignore the mouse. Disable to drag them."
+        )
+        self._click_through_action.toggled.connect(self._set_click_through)
+        menu.addAction(self._click_through_action)
+
+        menu.addSeparator()
+
         quit_action = QAction("Quit", menu)
         quit_action.triggered.connect(self._quit)
         menu.addAction(quit_action)
@@ -104,6 +115,10 @@ class SystemTray:
                     action.blockSignals(False)
 
         return change_sprites
+
+    def _set_click_through(self, enabled: bool) -> None:
+        for pet in self._pets:
+            pet.set_click_through(enabled)
 
     def _quit(self) -> None:
         self._tray.hide()

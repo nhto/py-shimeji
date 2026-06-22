@@ -92,21 +92,33 @@ class SurfaceTracker:
             if rect.bottom <= play_area.top() or rect.top >= play_area.bottom():
                 continue
 
+            # Win32 RECT.right is exclusive; clamp to the play area so pets cannot
+            # walk off the visible screen edge on partially off-screen windows.
+            ledge_left = max(rect.left, play_area.left())
+            ledge_right = min(rect.right - 1, play_area.right())
+            if ledge_right - ledge_left < PET_WIDTH - 1:
+                continue
+
+            stand_y = max(rect.top - PET_HEIGHT + 1, play_area.top())
             ledge_id = f"hwnd:{hwnd}"
             self._horizontal.append(
                 HorizontalLedge(
-                    left=rect.left,
-                    right=rect.right,
-                    stand_y=rect.top - PET_HEIGHT + 1,
+                    left=ledge_left,
+                    right=ledge_right,
+                    stand_y=stand_y,
                     ledge_id=ledge_id,
                     hwnd=hwnd,
                 )
             )
+            ledge_top = max(rect.top, play_area.top())
+            ledge_bottom = min(rect.bottom, play_area.bottom())
+            if ledge_bottom - ledge_top < MIN_WINDOW_HEIGHT:
+                continue
             self._vertical.append(
                 VerticalLedge(
                     edge_x=rect.left,
-                    top=rect.top,
-                    bottom=rect.bottom,
+                    top=ledge_top,
+                    bottom=ledge_bottom,
                     side="left",
                     hwnd=hwnd,
                 )
@@ -114,8 +126,8 @@ class SurfaceTracker:
             self._vertical.append(
                 VerticalLedge(
                     edge_x=rect.right,
-                    top=rect.top,
-                    bottom=rect.bottom,
+                    top=ledge_top,
+                    bottom=ledge_bottom,
                     side="right",
                     hwnd=hwnd,
                 )
