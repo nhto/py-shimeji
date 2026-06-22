@@ -57,6 +57,7 @@ assets/sprites/
 │   ├── idle_2.png
 │   ├── walk_1.png
 │   ├── walk_2.png
+│   ├── sit_1.png
 │   ├── fall_1.png
 │   └── drag_1.png
 └── pet_2/
@@ -69,6 +70,7 @@ Expected filenames in each folder:
 |---------|--------------------------------|
 | Idle    | `idle_1.png`, `idle_2.png`     |
 | Walk    | `walk_1.png`, `walk_2.png`     |
+| Sit     | `sit_1.png` (optional; falls back to idle) |
 | Fall    | `fall_1.png`                   |
 | Drag    | `drag_1.png`                   |
 
@@ -78,10 +80,10 @@ You can also change a pet's sprites at runtime from the **system tray** menu: **
 
 ## Controls
 
-- **Left-click + drag** — pick up a pet (DRAGGED state)
+- **Left-click + drag** — pick up a pet (DRAGGED state); disable **Click-through** in the tray first if it is enabled
 - **Release on floor** — return to IDLE
 - **Release in mid-air** — FALLING until the bottom of the available screen area
-- **System tray** — show/hide each pet, change sprite folders, or quit the app
+- **System tray** — show/hide each pet, toggle click-through, change sprite folders, or quit the app
 
 ## Multiple pets
 
@@ -89,7 +91,13 @@ By default the app spawns **two** desktop pets (`MAX_PETS` in `config.py`). They
 
 ## Behavior
 
-- **IDLE** — stands still; may switch to WALKING after a random delay
+- **IDLE** — stands still; may switch to WALKING after a random delay, or to SIT after standing idle longer
+- **SIT** — rests in place after extended idle time; returns to IDLE on its own or when picked up
 - **WALKING** — moves horizontally; flips direction or returns to IDLE at screen edges
-- **FALLING** — gravity until the floor (`QScreen.availableGeometry()` respects taskbar/dock)
+- **CLIMBING** — climbs window edges (Windows only) to reach title bars and ledges
+- **FALLING** — gravity until the nearest ledge or floor (`QScreen.availableGeometry()` respects taskbar/dock)
 - **DRAGGED** — user-controlled; normal animation pauses while held
+
+## Click-through
+
+Enable **Click-through (pass mouse clicks)** from the system tray when you want pets visible but not in the way — mouse clicks pass through to apps below. Turn it off again before dragging a pet.

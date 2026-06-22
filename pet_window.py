@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from collections import deque
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from PyQt6.QtGui import (
     QPainterPath,
     QPen,
     QPixmap,
+    QScreen,
     QShowEvent,
 )
 from PyQt6.QtWidgets import QWidget
@@ -152,12 +154,17 @@ class SpriteCache:
     def frames_for_state(self, state: PetState) -> list[QPixmap | None]:
         mapping = {
             PetState.IDLE: "idle",
+            PetState.SIT: "sit",
             PetState.WALKING: "walk",
             PetState.CLIMBING: "walk",
             PetState.FALLING: "fall",
             PetState.DRAGGED: "drag",
         }
-        return self._cache.get(mapping[state], self._cache["idle"])
+        key = mapping.get(state, "idle")
+        frames = self._cache.get(key, self._cache["idle"])
+        if state == PetState.SIT and not any(frame is not None for frame in frames):
+            return self._cache["idle"]
+        return frames
 
     def has_any_sprites(self, state: PetState) -> bool:
         return any(frame is not None for frame in self.frames_for_state(state))
@@ -200,6 +207,7 @@ class PetWindow(QWidget):
         self._active_ledge: HorizontalLedge | None = None
         self._climb_ledge: VerticalLedge | None = None
         self._climb_direction: int = -1  # -1 = up, 1 = down
+        self._click_through: bool = False
 
         self._fsm = PetStateMachine(self._on_fsm_state_changed, parent=self)
 
@@ -214,6 +222,15 @@ class PetWindow(QWidget):
     @property
     def has_sprites(self) -> bool:
         return self._sprites.has_sprites
+
+    @property
+    def click_through(self) -> bool:
+        return self._click_through
+
+    def set_click_through(self, enabled: bool) -> None:
+        """Pass mouse clicks to windows below when enabled."""
+        self._click_through = enabled
+        self._apply_click_through()
 
     def reload_sprites(self, sprites_dir: Path) -> None:
         """Load a new PNG set for this pet and refresh the window."""
@@ -263,12 +280,18 @@ class PetWindow(QWidget):
         x = self._play_area.left() + int(
             (self._play_area.width() - PET_WIDTH) * self._start_fraction
         )
+        x = self._clamp_x(x)
         y = self._play_area.bottom() - PET_HEIGHT + 1
         self.move(x, y)
 
     def _refresh_play_area(self) -> None:
         """Use available geometry so the pet rests above the taskbar/dock."""
-        screen = QGuiApplication.screenAt(self.pos())
+        frame = self.frameGeometry()
+        screen = QGuiApplication.screenAt(frame.center())
+        if screen is None:
+            screen = QGuiApplication.screenAt(frame.topLeft())
+        if screen is None:
+            screen = self._nearest_screen(frame.center())
         if screen is None:
             screen = QGuiApplication.primaryScreen()
         if screen is None:
@@ -276,15 +299,93 @@ class PetWindow(QWidget):
             return
         self._play_area = screen.availableGeometry()
 
+    def _nearest_screen(self, point: QPoint) -> QScreen | None:
+        """Return the screen whose bounds are closest to *point*."""
+        screens = QGuiApplication.screens()
+        if not screens:
+            return None
+        best: QScreen | None = None
+        best_dist = float("inf")
+        for screen in screens:
+            geo = screen.availableGeometry()
+            dx = 0
+            if point.x() < geo.left():
+                dx = geo.left() - point.x()
+            elif point.x() > geo.right():
+                dx = point.x() - geo.right()
+            dy = 0
+            if point.y() < geo.top():
+                dy = geo.top() - point.y()
+            elif point.y() > geo.bottom():
+                dy = point.y() - geo.bottom()
+            dist = dx * dx + dy * dy
+            if dist < best_dist:
+                best_dist = dist
+                best = screen
+        return best
+
+    def _min_pet_x(self) -> int:
+        return self._play_area.left()
+
+    def _max_pet_x(self) -> int:
+        return self._play_area.right() - PET_WIDTH + 1
+
+    def _clamp_x(self, x: int) -> int:
+        return max(self._min_pet_x(), min(x, self._max_pet_x()))
+
+    def _min_pet_y(self) -> int:
+        return self._play_area.top()
+
+    def _max_pet_y(self) -> int:
+        return self._play_area.bottom() - PET_HEIGHT + 1
+
+    def _clamp_y(self, y: int) -> int:
+        return max(self._min_pet_y(), min(y, self._max_pet_y()))
+
+    def _clamp_position(self, x: int, y: int) -> tuple[int, int]:
+        return self._clamp_x(x), self._clamp_y(y)
+
     def _refresh_surfaces(self) -> None:
         self._refresh_play_area()
         self._surfaces.refresh(self._play_area, self._exclude_hwnds)
+        if not self._is_dragging:
+            pos = self.pos()
+            clamped_x, clamped_y = self._clamp_position(pos.x(), pos.y())
+            if clamped_x != pos.x() or clamped_y != pos.y():
+                self.move(clamped_x, clamped_y)
+                if (
+                    clamped_y != pos.y()
+                    and self._fsm.state not in (PetState.FALLING, PetState.DRAGGED)
+                    and self._surfaces.find_ledge_at(clamped_x, clamped_y) is None
+                ):
+                    self._start_fall()
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
         self._exclude_hwnds.add(int(self.winId()))
         self._refresh_surfaces()
         self._active_ledge = self._surfaces.floor_ledge(self._play_area)
+        self._apply_click_through()
+
+    def _apply_click_through(self) -> None:
+        """Make the window ignore mouse hits when click-through is on."""
+        if sys.platform == "win32":
+            import ctypes
+
+            hwnd = int(self.winId())
+            gwl_exstyle = -20
+            ws_ex_transparent = 0x00000020
+            style = ctypes.windll.user32.GetWindowLongW(hwnd, gwl_exstyle)
+            if self._click_through:
+                style |= ws_ex_transparent
+            else:
+                style &= ~ws_ex_transparent
+            ctypes.windll.user32.SetWindowLongW(hwnd, gwl_exstyle, style)
+        else:
+            self.setAttribute(
+                Qt.WidgetAttribute.WA_TransparentForMouseEvents,
+                self._click_through,
+            )
 
     # ------------------------------------------------------------------
     # State machine callbacks
@@ -355,18 +456,19 @@ class PetWindow(QWidget):
             if ledge.ledge_id != "screen":
                 self._start_fall()
                 return
-            new_x = self._play_area.left()
+            new_x = self._min_pet_x()
             self._fsm.set_direction(1)
             self._fsm.notify_boundary_hit()
         elif new_x > pet_left_max:
             if ledge.ledge_id != "screen":
                 self._start_fall()
                 return
-            new_x = self._play_area.right() - PET_WIDTH + 1
+            new_x = self._max_pet_x()
             self._fsm.set_direction(-1)
             self._fsm.notify_boundary_hit()
 
-        self.move(new_x, ledge.stand_y)
+        new_x = self._clamp_x(new_x)
+        self.move(new_x, self._clamp_y(ledge.stand_y))
 
     def _climb_tick(self) -> None:
         climb = self._climb_ledge
@@ -378,20 +480,27 @@ class PetWindow(QWidget):
         pet_x = climb.pet_x()
 
         if self._climb_direction < 0:
-            new_y = pos.y() - CLIMB_SPEED_PX
-            if new_y <= climb.top - PET_HEIGHT + 8:
+            new_y = max(pos.y() - CLIMB_SPEED_PX, self._min_pet_y())
+            climb_top = max(climb.top, self._play_area.top())
+            if new_y <= climb_top - PET_HEIGHT + 8:
                 top_ledge = self._horizontal_ledge_for_hwnd(climb.hwnd)
                 if top_ledge is None:
                     self._start_fall()
                     return
                 self._active_ledge = top_ledge
-                land_x = max(
-                    top_ledge.left,
-                    min(pet_x, top_ledge.right - PET_WIDTH),
+                land_x = self._clamp_x(
+                    max(
+                        top_ledge.left,
+                        min(pet_x, top_ledge.right - PET_WIDTH),
+                    )
                 )
-                self.move(land_x, top_ledge.stand_y)
+                self.move(land_x, self._clamp_y(top_ledge.stand_y))
                 self._climb_ledge = None
                 self._fsm.force_state(PetState.WALKING)
+            elif new_y <= self._min_pet_y():
+                self.move(pet_x, self._min_pet_y())
+                self._climb_ledge = None
+                self._start_fall()
             else:
                 self.move(pet_x, new_y)
             return
@@ -400,8 +509,10 @@ class PetWindow(QWidget):
         if new_y + PET_HEIGHT >= climb.bottom - 4:
             floor = self._surfaces.floor_ledge(self._play_area)
             self._active_ledge = floor
-            land_x = max(floor.left, min(pet_x, floor.right - PET_WIDTH))
-            self.move(land_x, floor.stand_y)
+            land_x = self._clamp_x(
+                max(floor.left, min(pet_x, floor.right - PET_WIDTH))
+            )
+            self.move(land_x, self._clamp_y(floor.stand_y))
             self._climb_ledge = None
             self._fsm.force_state(PetState.WALKING)
         else:
@@ -433,13 +544,22 @@ class PetWindow(QWidget):
         next_feet_y = new_y + PET_HEIGHT - 1
         landing = self._surfaces.find_landing_ledge(pos.x(), pos.y(), next_feet_y)
         if landing is not None:
-            self.move(pos.x(), landing.stand_y)
+            land_x = self._clamp_x(pos.x())
+            self.move(land_x, self._clamp_y(landing.stand_y))
             self._active_ledge = landing
             self._fall_timer.stop()
             self._fsm.resume()
             self._fsm.force_state(PetState.IDLE)
+        elif next_feet_y >= self._play_area.bottom():
+            floor = self._surfaces.floor_ledge(self._play_area)
+            land_x = self._clamp_x(pos.x())
+            self.move(land_x, self._clamp_y(floor.stand_y))
+            self._active_ledge = floor
+            self._fall_timer.stop()
+            self._fsm.resume()
+            self._fsm.force_state(PetState.IDLE)
         else:
-            self.move(pos.x(), new_y)
+            self.move(self._clamp_x(pos.x()), self._clamp_y(new_y))
 
     def _is_on_support(self) -> bool:
         self._refresh_surfaces()
@@ -464,7 +584,8 @@ class PetWindow(QWidget):
         if not self._is_dragging:
             return
         new_pos = event.globalPosition().toPoint() - self._drag_offset
-        self.move(new_pos)
+        clamped_x, clamped_y = self._clamp_position(new_pos.x(), new_pos.y())
+        self.move(clamped_x, clamped_y)
         event.accept()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
@@ -533,16 +654,22 @@ class PetWindow(QWidget):
         eye_white = QColor(self._fallback_eye)
         pupil = QColor(self._fallback_pupil)
 
-        # Slight squash when falling, stretch when walking.
+        # Slight squash when falling, stretch when walking, wider when sitting.
         scale_y = 1.0
+        scale_x = 1.0
+        body_offset_y = 0.0
         if self._fsm.state == PetState.FALLING:
             scale_y = 1.12
         elif self._fsm.state in (PetState.WALKING, PetState.CLIMBING):
             scale_y = 0.95
+        elif self._fsm.state == PetState.SIT:
+            scale_x = 1.15
+            scale_y = 0.72
+            body_offset_y = 8.0
 
         painter.save()
-        painter.translate(cx, cy)
-        painter.scale(1.0, scale_y)
+        painter.translate(cx, cy + body_offset_y)
+        painter.scale(scale_x, scale_y)
 
         path = QPainterPath()
         path.addEllipse(QPointF(0, 0), radius, radius * 1.05)
@@ -550,14 +677,15 @@ class PetWindow(QWidget):
         painter.setBrush(QBrush(body))
         painter.drawPath(path)
 
-        # Eyes shift with facing direction.
+        # Eyes shift with facing direction; half-lidded while sitting.
         eye_dx = 7 * self._fsm.direction
         eye_y = -6
+        eye_h = 7 if self._fsm.state != PetState.SIT else 4
         for side in (-1, 1):
             ex = side * 10 + eye_dx * 0.3
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QBrush(eye_white))
-            painter.drawEllipse(QPointF(ex, eye_y), 6, 7)
+            painter.drawEllipse(QPointF(ex, eye_y), 6, eye_h)
             painter.setBrush(QBrush(pupil))
             pupil_dx = 2 * self._fsm.direction
             painter.drawEllipse(QPointF(ex + pupil_dx, eye_y + 1), 3, 4)

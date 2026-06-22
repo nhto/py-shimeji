@@ -18,6 +18,7 @@ ASSETS_DIR: Path = SPRITES_ROOT
 SPRITE_FILES: dict[str, list[str]] = {
     "idle": ["idle_1.png", "idle_2.png"],
     "walk": ["walk_1.png", "walk_2.png"],
+    "sit": ["sit_1.png"],
     "fall": ["fall_1.png"],
     "drag": ["drag_1.png"],
 }
@@ -39,6 +40,10 @@ IDLE_TO_WALK_MIN_MS: int = 3_000
 IDLE_TO_WALK_MAX_MS: int = 8_000
 WALK_TO_IDLE_MIN_MS: int = 2_000
 WALK_TO_IDLE_MAX_MS: int = 5_000
+IDLE_TO_SIT_MIN_MS: int = 12_000
+IDLE_TO_SIT_MAX_MS: int = 25_000
+SIT_TO_IDLE_MIN_MS: int = 5_000
+SIT_TO_IDLE_MAX_MS: int = 12_000
 
 # ---------------------------------------------------------------------------
 # Movement & physics
