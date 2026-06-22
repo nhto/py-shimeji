@@ -51,10 +51,13 @@ SIT_TO_IDLE_MAX_MS: int = 4_000
 # Movement & physics
 # ---------------------------------------------------------------------------
 
+MOVEMENT_SPEED_SCALE: float = 0.8
+
 WALK_SPEED_PX: int = 3
 CLIMB_SPEED_PX: int = 4
 GRAVITY_PX: int = 8
-FALL_TICK_MS: int = 16
+_BASE_MOVE_TICK_MS: int = 16
+FALL_TICK_MS: int = max(1, round(_BASE_MOVE_TICK_MS / MOVEMENT_SPEED_SCALE))
 SURFACE_REFRESH_MS: int = 400
 
 # Minimum window size to treat as a climbable surface (Windows).

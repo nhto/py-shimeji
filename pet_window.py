@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import sys
 from collections import deque
+from collections.abc import Callable
 from pathlib import Path
 
 from PyQt6.QtCore import QPoint, QPointF, QRect, Qt, QTimer
 from PyQt6.QtGui import (
     QBrush,
     QColor,
+    QContextMenuEvent,
     QGuiApplication,
     QImage,
     QMouseEvent,
@@ -209,6 +211,8 @@ class PetWindow(QWidget):
         self._climb_ledge: VerticalLedge | None = None
         self._climb_direction: int = -1  # -1 = up, 1 = down
         self._click_through: bool = False
+        self._context_menu_handler: Callable[[QPoint], None] | None = None
+        self._right_click_handled: bool = False
 
         self._fsm = PetStateMachine(self._on_fsm_state_changed, parent=self)
 
@@ -227,6 +231,11 @@ class PetWindow(QWidget):
     @property
     def click_through(self) -> bool:
         return self._click_through
+
+    def set_context_menu_handler(
+        self, handler: Callable[[QPoint], None] | None
+    ) -> None:
+        self._context_menu_handler = handler
 
     def set_click_through(self, enabled: bool) -> None:
         """Pass mouse clicks to windows below when enabled."""
@@ -374,7 +383,12 @@ class PetWindow(QWidget):
                 self._start_fall()
                 return
             self._active_ledge = ledge
-            if self._fsm.state in (PetState.IDLE, PetState.SIT):
+            if self._fsm.state == PetState.SIT:
+                stand_y = self._clamp_y(ledge.stand_y)
+                if pos.y() != stand_y:
+                    self.move(self._clamp_x(pos.x()), stand_y)
+                return
+            if self._fsm.state == PetState.IDLE:
                 self._fsm.begin_walking()
             return
 
@@ -591,7 +605,41 @@ class PetWindow(QWidget):
     # Mouse interaction
     # ------------------------------------------------------------------
 
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:  # noqa: N802
+        if self._click_through:
+            return
+        if self._right_click_handled:
+            self._right_click_handled = False
+            event.accept()
+            return
+        self._right_click_at(event.globalPos())
+        event.accept()
+
+    def _right_click_at(self, global_pos: QPoint) -> None:
+        self._sit_from_user()
+        if self._context_menu_handler is not None:
+            self._context_menu_handler(global_pos)
+
+    def _sit_from_user(self) -> None:
+        if self._fsm.state in (PetState.DRAGGED, PetState.FALLING):
+            return
+
+        self._climb_ledge = None
+        self._refresh_surfaces()
+        ledge = self._surfaces.find_ledge_at(self.pos().x(), self.pos().y())
+        if ledge is not None:
+            self._active_ledge = ledge
+            self.move(self._clamp_x(self.pos().x()), self._clamp_y(ledge.stand_y))
+        self._fsm.begin_sit()
+        self.update()
+
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.RightButton:
+            if not self._click_through:
+                self._right_click_at(event.globalPosition().toPoint())
+                self._right_click_handled = True
+            event.accept()
+            return
         if event.button() != Qt.MouseButton.LeftButton:
             return
         self._is_dragging = True
