@@ -8,7 +8,7 @@ from typing import Literal
 
 from PyQt6.QtCore import QRect
 
-from config import MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, PET_HEIGHT, PET_WIDTH
+from config import MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, PET_HEIGHT, PET_WIDTH, TOP_PERCH_MARGIN_PX
 
 Side = Literal["left", "right"]
 
@@ -23,8 +23,12 @@ class HorizontalLedge:
     ledge_id: str
     hwnd: int = 0  # 0 for the screen floor
 
+    def max_pet_x(self) -> int:
+        """Rightmost valid pet top-left x on this ledge."""
+        return self.right - PET_WIDTH + 1
+
     def contains_pet_x(self, pet_x: int) -> bool:
-        return self.left <= pet_x <= self.right - PET_WIDTH
+        return self.left <= pet_x <= self.max_pet_x()
 
 
 @dataclass(frozen=True)
@@ -92,31 +96,51 @@ class SurfaceTracker:
             if rect.bottom <= play_area.top() or rect.top >= play_area.bottom():
                 continue
 
-            ledge_id = f"hwnd:{hwnd}"
+            # Win32 RECT.right is exclusive; clamp to the play area so pets cannot
+            # walk off the visible screen edge on partially off-screen windows.
+            ledge_left = max(rect.left, play_area.left())
+            ledge_right = min(rect.right - 1, play_area.right())
+            if ledge_right - ledge_left < PET_WIDTH - 1:
+                continue
+
+            ledge_top = max(rect.top, play_area.top())
+            ledge_bottom = min(rect.bottom, play_area.bottom())
+            if ledge_bottom - ledge_top >= MIN_WINDOW_HEIGHT:
+                self._vertical.append(
+                    VerticalLedge(
+                        edge_x=rect.left,
+                        top=ledge_top,
+                        bottom=ledge_bottom,
+                        side="left",
+                        hwnd=hwnd,
+                    )
+                )
+                self._vertical.append(
+                    VerticalLedge(
+                        edge_x=rect.right,
+                        top=ledge_top,
+                        bottom=ledge_bottom,
+                        side="right",
+                        hwnd=hwnd,
+                    )
+                )
+
+            # Skip title bars that would clamp to the screen top; they create
+            # bogus perches (e.g. maximized windows) where the pet gets stuck.
+            min_window_top = play_area.top() + PET_HEIGHT - 1
+            if rect.top < min_window_top:
+                continue
+
+            stand_y = rect.top - PET_HEIGHT + 1
+            if stand_y < play_area.top() + TOP_PERCH_MARGIN_PX:
+                continue
+
             self._horizontal.append(
                 HorizontalLedge(
-                    left=rect.left,
-                    right=rect.right,
-                    stand_y=rect.top - PET_HEIGHT + 1,
-                    ledge_id=ledge_id,
-                    hwnd=hwnd,
-                )
-            )
-            self._vertical.append(
-                VerticalLedge(
-                    edge_x=rect.left,
-                    top=rect.top,
-                    bottom=rect.bottom,
-                    side="left",
-                    hwnd=hwnd,
-                )
-            )
-            self._vertical.append(
-                VerticalLedge(
-                    edge_x=rect.right,
-                    top=rect.top,
-                    bottom=rect.bottom,
-                    side="right",
+                    left=ledge_left,
+                    right=ledge_right,
+                    stand_y=stand_y,
+                    ledge_id=f"hwnd:{hwnd}",
                     hwnd=hwnd,
                 )
             )
@@ -224,6 +248,17 @@ class SurfaceTracker:
         self._WNDENUMPROC = ctypes.WINFUNCTYPE(
             wintypes.BOOL, wintypes.HWND, wintypes.LPARAM
         )
+        # Desktop/shell HWND classes are not real climbable surfaces.
+        self._SKIP_WINDOW_CLASSES = frozenset(
+            {
+                "Progman",
+                "WorkerW",
+                "Shell_TrayWnd",
+                "Shell_SecondaryTrayWnd",
+                "DV2ControlHost",
+                "Windows.UI.Core.CoreWindow",
+            }
+        )
 
     def _enumerate_windows(self, exclude_hwnds: set[int]) -> list[tuple[int, object]]:
         import ctypes
@@ -237,6 +272,11 @@ class SurfaceTracker:
                 return True
             if self._user32.IsIconic(hwnd):
                 return True
+
+            class_name = ctypes.create_unicode_buffer(256)
+            if self._user32.GetClassNameW(hwnd, class_name, 256):
+                if class_name.value in self._SKIP_WINDOW_CLASSES:
+                    return True
 
             rect = self._RECT()
             if not self._user32.GetWindowRect(hwnd, ctypes.byref(rect)):

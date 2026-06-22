@@ -18,6 +18,7 @@ ASSETS_DIR: Path = SPRITES_ROOT
 SPRITE_FILES: dict[str, list[str]] = {
     "idle": ["idle_1.png", "idle_2.png"],
     "walk": ["walk_1.png", "walk_2.png"],
+    "sit": ["sit_1.png"],
     "fall": ["fall_1.png"],
     "drag": ["drag_1.png"],
 }
@@ -33,21 +34,30 @@ PET_HEIGHT: int = 64
 # Timers (milliseconds)
 # ---------------------------------------------------------------------------
 
+TOP_PERCH_MARGIN_PX: int = 80
+
 ANIMATION_INTERVAL_MS: int = 120
 BEHAVIOR_INTERVAL_MS: int = 500
-IDLE_TO_WALK_MIN_MS: int = 3_000
-IDLE_TO_WALK_MAX_MS: int = 8_000
-WALK_TO_IDLE_MIN_MS: int = 2_000
-WALK_TO_IDLE_MAX_MS: int = 5_000
+IDLE_TO_WALK_MIN_MS: int = 1_000
+IDLE_TO_WALK_MAX_MS: int = 2_500
+WALK_TO_IDLE_MIN_MS: int = 1_000
+WALK_TO_IDLE_MAX_MS: int = 2_500
+IDLE_TO_SIT_MIN_MS: int = 20_000
+IDLE_TO_SIT_MAX_MS: int = 40_000
+SIT_TO_IDLE_MIN_MS: int = 2_000
+SIT_TO_IDLE_MAX_MS: int = 4_000
 
 # ---------------------------------------------------------------------------
 # Movement & physics
 # ---------------------------------------------------------------------------
 
+MOVEMENT_SPEED_SCALE: float = 0.8
+
 WALK_SPEED_PX: int = 3
 CLIMB_SPEED_PX: int = 4
 GRAVITY_PX: int = 8
-FALL_TICK_MS: int = 16
+_BASE_MOVE_TICK_MS: int = 16
+FALL_TICK_MS: int = max(1, round(_BASE_MOVE_TICK_MS / MOVEMENT_SPEED_SCALE))
 SURFACE_REFRESH_MS: int = 400
 
 # Minimum window size to treat as a climbable surface (Windows).

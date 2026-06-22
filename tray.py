@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QPoint, Qt
 from PyQt6.QtGui import QAction, QBrush, QColor, QIcon, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMenu, QSystemTrayIcon
 
@@ -69,12 +69,43 @@ class SystemTray:
 
         menu.addSeparator()
 
+        self._click_through_action = QAction("Click-through (pass mouse clicks)", menu)
+        self._click_through_action.setCheckable(True)
+        self._click_through_action.setChecked(False)
+        self._click_through_action.setToolTip(
+            "When enabled, pets ignore the mouse. Disable to drag them."
+        )
+        self._click_through_action.toggled.connect(self._set_click_through)
+        menu.addAction(self._click_through_action)
+
+        menu.addSeparator()
+
         quit_action = QAction("Quit", menu)
         quit_action.triggered.connect(self._quit)
         menu.addAction(quit_action)
 
+        self._menu = menu
         self._tray.setContextMenu(menu)
         self._tray.show()
+
+    def show_context_menu(self, global_pos: QPoint) -> None:
+        """Show the app menu at a screen position (e.g. pet right-click)."""
+        self._refresh_menu_state()
+        self._menu.popup(global_pos)
+
+    def _refresh_menu_state(self) -> None:
+        for index, pet in enumerate(self._pets, start=1):
+            action = self._visibility_actions[index]
+            visible = pet.isVisible()
+            action.blockSignals(True)
+            action.setChecked(visible)
+            action.setText(f"{'Hide' if visible else 'Show'} Pet {index}")
+            action.blockSignals(False)
+
+        click_through = bool(self._pets) and all(pet.click_through for pet in self._pets)
+        self._click_through_action.blockSignals(True)
+        self._click_through_action.setChecked(click_through)
+        self._click_through_action.blockSignals(False)
 
     @staticmethod
     def _make_visibility_toggle(pet: PetWindow, action: QAction, index: int):
@@ -104,6 +135,10 @@ class SystemTray:
                     action.blockSignals(False)
 
         return change_sprites
+
+    def _set_click_through(self, enabled: bool) -> None:
+        for pet in self._pets:
+            pet.set_click_through(enabled)
 
     def _quit(self) -> None:
         self._tray.hide()
