@@ -62,8 +62,16 @@ class SurfaceTracker:
         if self._enabled:
             self._init_win32()
 
-    def refresh(self, play_area: QRect, exclude_hwnd: int = 0) -> None:
+    def refresh(
+        self, play_area: QRect, exclude_hwnds: int | set[int] | None = None
+    ) -> None:
         """Rebuild ledge lists for the current play area and window layout."""
+        if exclude_hwnds is None:
+            exclude_set: set[int] = set()
+        elif isinstance(exclude_hwnds, int):
+            exclude_set = {exclude_hwnds} if exclude_hwnds else set()
+        else:
+            exclude_set = exclude_hwnds
         floor = HorizontalLedge(
             left=play_area.left(),
             right=play_area.right(),
@@ -76,7 +84,7 @@ class SurfaceTracker:
         if not self._enabled:
             return
 
-        for hwnd, rect in self._enumerate_windows(exclude_hwnd):
+        for hwnd, rect in self._enumerate_windows(exclude_set):
             width = rect.right - rect.left
             height = rect.bottom - rect.top
             if width < MIN_WINDOW_WIDTH or height < MIN_WINDOW_HEIGHT:
@@ -217,13 +225,13 @@ class SurfaceTracker:
             wintypes.BOOL, wintypes.HWND, wintypes.LPARAM
         )
 
-    def _enumerate_windows(self, exclude_hwnd: int) -> list[tuple[int, object]]:
+    def _enumerate_windows(self, exclude_hwnds: set[int]) -> list[tuple[int, object]]:
         import ctypes
 
         results: list[tuple[int, object]] = []
 
         def callback(hwnd: int, _lparam: int) -> bool:
-            if hwnd == exclude_hwnd:
+            if hwnd in exclude_hwnds:
                 return True
             if not self._user32.IsWindowVisible(hwnd):
                 return True

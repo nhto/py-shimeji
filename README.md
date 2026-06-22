@@ -16,7 +16,7 @@ The pet lives in a frameless, transparent, always-on-top window. It idles, walks
 python -m venv .venv
 
 # Windows
-source .venv\Scripts\activate
+source .venv/Scripts/activate
 
 # macOS / Linux
 source .venv/bin/activate
@@ -40,13 +40,30 @@ py-shimeji/
 ├── states.py        # PetState enum and FSM
 ├── pet_window.py    # Window, input, physics, rendering
 ├── assets/
-│   └── sprites/     # Optional PNG sprite frames
+│   └── sprites/
+│       ├── pet_1/   # PNG set for pet 1
+│       └── pet_2/   # PNG set for pet 2
 └── requirements.txt
 ```
 
 ## Sprites (optional)
 
-Place PNG files in `assets/sprites/`. Expected names:
+Each pet loads its own PNG set from a separate folder:
+
+```
+assets/sprites/
+├── pet_1/
+│   ├── idle_1.png
+│   ├── idle_2.png
+│   ├── walk_1.png
+│   ├── walk_2.png
+│   ├── fall_1.png
+│   └── drag_1.png
+└── pet_2/
+    └── (same filenames)
+```
+
+Expected filenames in each folder:
 
 | State   | Files                          |
 |---------|--------------------------------|
@@ -55,13 +72,20 @@ Place PNG files in `assets/sprites/`. Expected names:
 | Fall    | `fall_1.png`                   |
 | Drag    | `drag_1.png`                   |
 
-If files are missing, the app draws a colored vector fallback (circle with eyes) so it runs without assets.
+If files are missing for a pet, that pet stays **hidden on startup** and uses a colored vector fallback only if you show it from the tray.
+
+You can also change a pet's sprites at runtime from the **system tray** menu: **Change Pet N sprites...** opens a folder picker, reloads that pet, and shows it when PNGs are found.
 
 ## Controls
 
-- **Left-click + drag** — pick up the pet (DRAGGED state)
+- **Left-click + drag** — pick up a pet (DRAGGED state)
 - **Release on floor** — return to IDLE
 - **Release in mid-air** — FALLING until the bottom of the available screen area
+- **System tray** — show/hide each pet, change sprite folders, or quit the app
+
+## Multiple pets
+
+By default the app spawns **two** desktop pets (`MAX_PETS` in `config.py`). They start at different positions along the taskbar edge, load sprites from `assets/sprites/pet_1/` and `assets/sprites/pet_2/`, and use distinct fallback colors when PNGs are missing (pink and teal). Each pet has its own behavior, physics, and drag handling.
 
 ## Behavior
 
