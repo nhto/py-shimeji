@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import deque
 from pathlib import Path
 
-from PyQt6.QtCore import QPoint, QRect, Qt, QTimer
+from PyQt6.QtCore import QPoint, QPointF, QRect, Qt, QTimer
 from PyQt6.QtGui import (
     QBrush,
     QColor,
@@ -23,19 +23,16 @@ from PyQt6.QtWidgets import QWidget
 
 from config import (
     ANIMATION_INTERVAL_MS,
-    ASSETS_DIR,
     CLIMB_SPEED_PX,
-    FALLBACK_BODY_COLOR,
-    FALLBACK_EYE_COLOR,
-    FALLBACK_OUTLINE_COLOR,
-    FALLBACK_PUPIL_COLOR,
     FALL_TICK_MS,
     GRAVITY_PX,
+    PET_FALLBACK_PALETTES,
     PET_HEIGHT,
     PET_WIDTH,
     SPRITE_FILES,
     SURFACE_REFRESH_MS,
     WALK_SPEED_PX,
+    get_pet_sprites_dir,
 )
 from states import PetState, PetStateMachine
 from surfaces import HorizontalLedge, SurfaceTracker, VerticalLedge
@@ -136,6 +133,22 @@ class SpriteCache:
                 frames.append(_prepare_sprite(path) if path.is_file() else None)
             self._cache[group] = frames
 
+    def reload(self, assets_dir: Path | None = None) -> None:
+        """Reload sprite frames from disk (optionally from a new folder)."""
+        if assets_dir is not None:
+            self._assets_dir = assets_dir
+        self._cache.clear()
+        self._load_all()
+
+    @property
+    def has_sprites(self) -> bool:
+        """True when at least one sprite frame loaded successfully."""
+        return any(
+            frame is not None
+            for frames in self._cache.values()
+            for frame in frames
+        )
+
     def frames_for_state(self, state: PetState) -> list[QPixmap | None]:
         mapping = {
             PetState.IDLE: "idle",
@@ -158,14 +171,31 @@ class PetWindow(QWidget):
     and vector fallback rendering when assets are unavailable.
     """
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        pet_index: int = 0,
+        pet_count: int = 1,
+        exclude_hwnds: set[int] | None = None,
+        sprites_dir: Path | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
-        self._sprites = SpriteCache(ASSETS_DIR)
+        self._pet_index = pet_index
+        self._pet_count = max(1, pet_count)
+        self._exclude_hwnds = exclude_hwnds if exclude_hwnds is not None else set()
+        self._sprites_dir = sprites_dir or get_pet_sprites_dir(pet_index)
+        self._start_fraction = (pet_index + 1) / (self._pet_count + 1)
+        palette = PET_FALLBACK_PALETTES[pet_index % len(PET_FALLBACK_PALETTES)]
+        self._fallback_body = palette["body"]
+        self._fallback_outline = palette["outline"]
+        self._fallback_eye = palette["eye"]
+        self._fallback_pupil = palette["pupil"]
+
+        self._sprites = SpriteCache(self._sprites_dir)
         self._frame_index: int = 0
         self._drag_offset = QPoint(0, 0)
         self._is_dragging: bool = False
         self._play_area: QRect = QRect()
-        self._exclude_hwnd: int = 0
         self._surfaces = SurfaceTracker()
         self._active_ledge: HorizontalLedge | None = None
         self._climb_ledge: VerticalLedge | None = None
@@ -175,7 +205,22 @@ class PetWindow(QWidget):
 
         self._setup_window()
         self._setup_timers()
-        self._place_on_floor_centered()
+        self._place_on_floor()
+
+    @property
+    def sprites_dir(self) -> Path:
+        return self._sprites_dir
+
+    @property
+    def has_sprites(self) -> bool:
+        return self._sprites.has_sprites
+
+    def reload_sprites(self, sprites_dir: Path) -> None:
+        """Load a new PNG set for this pet and refresh the window."""
+        self._sprites_dir = sprites_dir
+        self._sprites.reload(sprites_dir)
+        self._frame_index = 0
+        self.update()
 
     # ------------------------------------------------------------------
     # Window setup
@@ -213,9 +258,11 @@ class PetWindow(QWidget):
         self._surface_timer.timeout.connect(self._refresh_surfaces)
         self._surface_timer.start()
 
-    def _place_on_floor_centered(self) -> None:
+    def _place_on_floor(self) -> None:
         self._refresh_play_area()
-        x = self._play_area.left() + (self._play_area.width() - PET_WIDTH) // 2
+        x = self._play_area.left() + int(
+            (self._play_area.width() - PET_WIDTH) * self._start_fraction
+        )
         y = self._play_area.bottom() - PET_HEIGHT + 1
         self.move(x, y)
 
@@ -231,11 +278,11 @@ class PetWindow(QWidget):
 
     def _refresh_surfaces(self) -> None:
         self._refresh_play_area()
-        self._surfaces.refresh(self._play_area, self._exclude_hwnd)
+        self._surfaces.refresh(self._play_area, self._exclude_hwnds)
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
-        self._exclude_hwnd = int(self.winId())
+        self._exclude_hwnds.add(int(self.winId()))
         self._refresh_surfaces()
         self._active_ledge = self._surfaces.floor_ledge(self._play_area)
 
@@ -481,10 +528,10 @@ class PetWindow(QWidget):
         cx, cy = PET_WIDTH / 2, PET_HEIGHT / 2
         radius = min(PET_WIDTH, PET_HEIGHT) * 0.38
 
-        body = QColor(FALLBACK_BODY_COLOR)
-        outline = QColor(FALLBACK_OUTLINE_COLOR)
-        eye_white = QColor(FALLBACK_EYE_COLOR)
-        pupil = QColor(FALLBACK_PUPIL_COLOR)
+        body = QColor(self._fallback_body)
+        outline = QColor(self._fallback_outline)
+        eye_white = QColor(self._fallback_eye)
+        pupil = QColor(self._fallback_pupil)
 
         # Slight squash when falling, stretch when walking.
         scale_y = 1.0
@@ -498,7 +545,7 @@ class PetWindow(QWidget):
         painter.scale(1.0, scale_y)
 
         path = QPainterPath()
-        path.addEllipse(QPoint(0, 0), int(radius), int(radius * 1.05))
+        path.addEllipse(QPointF(0, 0), radius, radius * 1.05)
         painter.setPen(QPen(outline, 2))
         painter.setBrush(QBrush(body))
         painter.drawPath(path)
@@ -510,10 +557,10 @@ class PetWindow(QWidget):
             ex = side * 10 + eye_dx * 0.3
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QBrush(eye_white))
-            painter.drawEllipse(QPoint(int(ex), eye_y), 6, 7)
+            painter.drawEllipse(QPointF(ex, eye_y), 6, 7)
             painter.setBrush(QBrush(pupil))
             pupil_dx = 2 * self._fsm.direction
-            painter.drawEllipse(QPoint(int(ex + pupil_dx), eye_y + 1), 3, 4)
+            painter.drawEllipse(QPointF(ex + pupil_dx, eye_y + 1), 3, 4)
 
         # Simple feet for walk animation alternation.
         if self._fsm.state in (PetState.WALKING, PetState.CLIMBING):
@@ -523,7 +570,7 @@ class PetWindow(QWidget):
             for side in (-1, 1):
                 fx = side * 14
                 fy = int(radius * 0.75) + (step if side > 0 else -step)
-                painter.drawEllipse(QPoint(fx, fy), 5, 4)
+                painter.drawEllipse(QPointF(fx, fy), 5, 4)
 
         # Grab indicator while dragged.
         if self._fsm.state == PetState.DRAGGED:
