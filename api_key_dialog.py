@@ -41,6 +41,7 @@ from config import (
     set_chat_language,
     set_openrouter_api_key,
 )
+from dialog_theme import DIALOG_HEADING_STYLE, DIALOG_HINT_STYLE, apply_light_dialog_theme
 from pet_window import PetWindow
 
 
@@ -75,6 +76,7 @@ class PreferencesDialog(QDialog):
     def _setup_window(self) -> None:
         self.setModal(True)
         self.setMinimumWidth(420)
+        apply_light_dialog_theme(self)
 
     def showEvent(self, event) -> None:  # type: ignore[override]
         super().showEvent(event)
@@ -115,7 +117,7 @@ class PreferencesDialog(QDialog):
         layout.setSpacing(12)
 
         self._openrouter_heading = QLabel()
-        self._openrouter_heading.setStyleSheet("font-weight: 600;")
+        self._openrouter_heading.setStyleSheet(DIALOG_HEADING_STYLE)
         layout.addWidget(self._openrouter_heading)
 
         self._intro = QLabel()
@@ -138,7 +140,7 @@ class PreferencesDialog(QDialog):
 
         self._hint = QLabel()
         self._hint.setWordWrap(True)
-        self._hint.setStyleSheet("color: #64748b; font-size: 11px;")
+        self._hint.setStyleSheet(DIALOG_HINT_STYLE)
         layout.addWidget(self._hint)
 
         self._link = QLabel()
@@ -152,12 +154,12 @@ class PreferencesDialog(QDialog):
         layout.addWidget(separator)
 
         self._language_heading = QLabel()
-        self._language_heading.setStyleSheet("font-weight: 600;")
+        self._language_heading.setStyleSheet(DIALOG_HEADING_STYLE)
         layout.addWidget(self._language_heading)
 
         self._language_hint = QLabel()
         self._language_hint.setWordWrap(True)
-        self._language_hint.setStyleSheet("color: #64748b; font-size: 11px;")
+        self._language_hint.setStyleSheet(DIALOG_HINT_STYLE)
         layout.addWidget(self._language_hint)
 
         self._language_picker = QComboBox()

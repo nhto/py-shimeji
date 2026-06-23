@@ -7,7 +7,7 @@ import sys
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon
 
-from config import MAX_PETS, get_pet_sprites_dir, get_saved_pet_visible, get_saved_pets_paused
+from config import get_pet_sprites_dir, get_saved_pet_visible, get_saved_pets_paused, get_saved_pet_count
 from display import DisplayChangeWatcher
 from pet_window import PetWindow
 from tray import SystemTray
@@ -27,7 +27,7 @@ def main() -> int:
         app.setFont(font)
 
     exclude_hwnds: set[int] = set()
-    pet_count = max(1, MAX_PETS)
+    pet_count = max(1, get_saved_pet_count())
     pets = [
         PetWindow(
             pet_index=index,
@@ -39,6 +39,7 @@ def main() -> int:
     ]
     for index, pet in enumerate(pets):
         pet.set_peer_pets([other for other_index, other in enumerate(pets) if other_index != index])
+        pet.apply_behavior_settings()
 
     if get_saved_pets_paused():
         for pet in pets:
@@ -51,11 +52,16 @@ def main() -> int:
         if visible:
             pet.show()
 
-    DisplayChangeWatcher(pets, parent=pets[0] if pets else None)
+    display_watcher = DisplayChangeWatcher(pets, parent=pets[0] if pets else None)
 
     if QSystemTrayIcon.isSystemTrayAvailable():
         app.setQuitOnLastWindowClosed(False)
-        tray = SystemTray(app, pets)
+        tray = SystemTray(
+            app,
+            pets,
+            exclude_hwnds=exclude_hwnds,
+            display_watcher=display_watcher,
+        )
         for pet in pets:
             pet.set_context_menu_handler(tray.show_context_menu)
     elif not any(pet.isVisible() for pet in pets):

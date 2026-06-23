@@ -98,13 +98,13 @@ class SpeechBubbleWindow(QWidget):
         tail.closeSubpath()
 
         bubble = body.united(tail)
-        painter.setPen(QPen(QColor("#4b4563"), 1))
-        painter.setBrush(QColor("#2a2638"))
+        painter.setPen(QPen(QColor("#cbd5e1"), 1))
+        painter.setBrush(QColor("#ffffff"))
         painter.drawPath(bubble)
 
         font = QFont("Segoe UI", 10)
         painter.setFont(font)
-        painter.setPen(QColor("#f1f5f9"))
+        painter.setPen(QColor("#1e293b"))
         painter.drawText(
             SPEECH_BUBBLE_PADDING_PX,
             SPEECH_BUBBLE_PADDING_PX,
