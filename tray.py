@@ -8,8 +8,18 @@ from PyQt6.QtCore import QPoint, Qt
 from PyQt6.QtGui import QAction, QBrush, QColor, QIcon, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMenu, QSystemTrayIcon
 
+from api_key_dialog import open_api_key_dialog
 from chat_window import ChatWindow
-from config import FALLBACK_BODY_COLOR, FALLBACK_OUTLINE_COLOR, get_pet_sprites_dir
+from config import (
+    FALLBACK_BODY_COLOR,
+    FALLBACK_OUTLINE_COLOR,
+    TRAY_API_KEY_CLEARED_MESSAGE,
+    TRAY_API_KEY_SAVED_MESSAGE,
+    TRAY_NO_API_KEY_MESSAGE,
+    TRAY_NO_API_KEY_TITLE,
+    get_pet_sprites_dir,
+    has_openrouter_api_key,
+)
 from pet_window import PetWindow
 
 
@@ -73,6 +83,11 @@ class SystemTray:
         chat_action = QAction("Chat with bubu", menu)
         chat_action.triggered.connect(self._open_chat)
         menu.addAction(chat_action)
+        self._chat_action = chat_action
+
+        api_key_action = QAction("OpenRouter API key...", menu)
+        api_key_action.triggered.connect(self._manage_api_key)
+        menu.addAction(api_key_action)
 
         menu.addSeparator()
 
@@ -96,6 +111,14 @@ class SystemTray:
         menu.aboutToHide.connect(self._on_menu_closed)
         self._tray.setContextMenu(menu)
         self._tray.show()
+
+        if not has_openrouter_api_key():
+            self._tray.showMessage(
+                TRAY_NO_API_KEY_TITLE,
+                TRAY_NO_API_KEY_MESSAGE,
+                QSystemTrayIcon.MessageIcon.Information,
+                8_000,
+            )
 
     def show_context_menu(self, global_pos: QPoint, pet: PetWindow | None = None) -> None:
         """Show the app menu at a screen position (e.g. pet right-click)."""
@@ -123,6 +146,11 @@ class SystemTray:
         self._click_through_action.blockSignals(True)
         self._click_through_action.setChecked(click_through)
         self._click_through_action.blockSignals(False)
+
+        if has_openrouter_api_key():
+            self._chat_action.setToolTip("")
+        else:
+            self._chat_action.setToolTip(TRAY_NO_API_KEY_MESSAGE)
 
     @staticmethod
     def _make_visibility_toggle(pet: PetWindow, action: QAction, index: int):
@@ -161,6 +189,39 @@ class SystemTray:
         pet = self._menu_host_pet or (self._pets[0] if self._pets else None)
         parent = self._pets[0] if self._pets else None
         ChatWindow.open_chat(parent, pet=pet)
+
+    def _manage_api_key(self) -> None:
+        parent = self._pets[0] if self._pets else None
+        pet = self._menu_host_pet or (self._pets[0] if self._pets else None)
+        had_key = has_openrouter_api_key()
+        if not open_api_key_dialog(parent, pet=pet):
+            return
+
+        has_key = has_openrouter_api_key()
+        self._refresh_menu_state()
+        ChatWindow.refresh_api_key_state()
+
+        if has_key and not had_key:
+            self._tray.showMessage(
+                "py-shimeji",
+                TRAY_API_KEY_SAVED_MESSAGE,
+                QSystemTrayIcon.MessageIcon.Information,
+                5_000,
+            )
+        elif not has_key and had_key:
+            self._tray.showMessage(
+                "py-shimeji",
+                TRAY_API_KEY_CLEARED_MESSAGE,
+                QSystemTrayIcon.MessageIcon.Information,
+                5_000,
+            )
+        elif has_key:
+            self._tray.showMessage(
+                "py-shimeji",
+                TRAY_API_KEY_SAVED_MESSAGE,
+                QSystemTrayIcon.MessageIcon.Information,
+                5_000,
+            )
 
     def _quit(self) -> None:
         self._tray.hide()

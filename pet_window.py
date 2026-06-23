@@ -13,6 +13,7 @@ from PyQt6.QtGui import (
     QBrush,
     QColor,
     QContextMenuEvent,
+    QCursor,
     QGuiApplication,
     QImage,
     QMouseEvent,
@@ -28,7 +29,15 @@ from PyQt6.QtWidgets import QWidget
 
 from config import (
     ANIMATION_INTERVAL_MS,
+    BEHAVIOR_INTERVAL_MS,
     CLIMB_SPEED_PX,
+    CURSOR_CHASE_CHANCE,
+    CURSOR_CHASE_MAX_MS,
+    CURSOR_CHASE_MIN_MS,
+    CURSOR_SIT_DISTANCE_PX,
+    CURSOR_STILL_MS,
+    CURSOR_STILL_TOLERANCE_PX,
+    CURSOR_Y_TOLERANCE_PX,
     FALL_TICK_MS,
     GRAVITY_PX,
     PEER_INTERACTION_Y_TOLERANCE_PX,
@@ -163,6 +172,7 @@ class SpriteCache:
             PetState.IDLE: "idle",
             PetState.SIT: "sit",
             PetState.WALKING: "walk",
+            PetState.CHASING_CURSOR: "walk",
             PetState.CLIMBING: "walk",
             PetState.FALLING: "fall",
             PetState.DRAGGED: "drag",
@@ -221,6 +231,11 @@ class PetWindow(QWidget):
         self._peer_pets: list[PetWindow] = []
         self._menu_hold: bool = False
         self._chat_hold: bool = False
+        self._cursor_sit_active: bool = False
+        self._cursor_still_ms: int = 0
+        self._last_cursor_pos: QPoint | None = None
+        self._cursor_chase_ms_left: int = 0
+        self._idle_chase_accum_ms: int = 0
 
         self._fsm = PetStateMachine(self._on_fsm_state_changed, parent=self)
 
@@ -310,6 +325,9 @@ class PetWindow(QWidget):
         self._leave_hold_if_idle()
 
     def _enter_hold(self) -> None:
+        self._cursor_sit_active = False
+        self._cursor_still_ms = 0
+        self._cursor_chase_ms_left = 0
         self._climb_ledge = None
         self._refresh_surfaces()
         ledge = self._surfaces.find_ledge_at(self.pos().x(), self.pos().y())
@@ -532,6 +550,10 @@ class PetWindow(QWidget):
 
     def _on_fsm_state_changed(self, old: PetState, new: PetState) -> None:
         self._frame_index = 0
+        if new == PetState.SIT and old != PetState.CHASING_CURSOR:
+            self._cursor_sit_active = False
+        if new != PetState.CHASING_CURSOR and old == PetState.CHASING_CURSOR:
+            self._cursor_chase_ms_left = 0
         if new == PetState.FALLING:
             self._fall_timer.start()
         elif old == PetState.FALLING:
@@ -557,10 +579,23 @@ class PetWindow(QWidget):
         if self._fsm.state == PetState.WALKING:
             self._horizontal_walk_tick()
             self._handle_peer_interactions()
+        elif self._fsm.state == PetState.CHASING_CURSOR:
+            self._cursor_chase_tick()
+            self._handle_peer_interactions()
         elif self._fsm.state == PetState.CLIMBING:
             self._climb_tick()
+        elif self._fsm.state == PetState.IDLE:
+            self._idle_chase_accum_ms += FALL_TICK_MS
+            if self._idle_chase_accum_ms >= BEHAVIOR_INTERVAL_MS:
+                self._idle_chase_accum_ms = 0
+                self._maybe_start_cursor_chase()
+        elif self._fsm.state == PetState.SIT and self._cursor_sit_active:
+            self._monitor_cursor_sit()
 
     def _horizontal_walk_tick(self) -> None:
+        self._move_on_ledge(self._fsm.direction, allow_climb=True)
+
+    def _move_on_ledge(self, direction: int, *, allow_climb: bool) -> None:
         pos = self.pos()
         direction = self._fsm.direction
         new_x = pos.x() + WALK_SPEED_PX * direction
@@ -582,7 +617,10 @@ class PetWindow(QWidget):
             standing_on_hwnd=ledge.hwnd,
         )
         if climb is not None:
-            self._start_climb(climb, direction=-1)
+            if allow_climb:
+                self._start_climb(climb, direction=-1)
+            elif self._fsm.state == PetState.CHASING_CURSOR:
+                self._end_cursor_chase()
             return
 
         pet_left_min = ledge.left
@@ -592,15 +630,24 @@ class PetWindow(QWidget):
             if ledge.ledge_id != "screen" and direction < 0:
                 vertical = self._surfaces.vertical_for_window(ledge.hwnd, "left")
                 if vertical is not None:
-                    self._start_climb(vertical, direction=1)
+                    if allow_climb:
+                        self._start_climb(vertical, direction=1)
+                    elif self._fsm.state == PetState.CHASING_CURSOR:
+                        self._end_cursor_chase()
                     return
             if ledge.ledge_id != "screen":
+                if not allow_climb:
+                    self._end_cursor_chase()
+                    return
                 # Turn at window ledge ends; falling re-lands on the same perch
                 # (find_landing_ledge matches the current surface on the first tick).
                 new_x = pet_left_min
                 self._fsm.set_direction(1)
                 self._fsm.notify_boundary_hit()
             else:
+                if not allow_climb:
+                    self._end_cursor_chase()
+                    return
                 new_x = self._min_pet_x()
                 self._fsm.set_direction(1)
                 self._fsm.notify_boundary_hit()
@@ -608,19 +655,128 @@ class PetWindow(QWidget):
             if ledge.ledge_id != "screen" and direction > 0:
                 vertical = self._surfaces.vertical_for_window(ledge.hwnd, "right")
                 if vertical is not None:
-                    self._start_climb(vertical, direction=1)
+                    if allow_climb:
+                        self._start_climb(vertical, direction=1)
+                    elif self._fsm.state == PetState.CHASING_CURSOR:
+                        self._end_cursor_chase()
                     return
             if ledge.ledge_id != "screen":
+                if not allow_climb:
+                    self._end_cursor_chase()
+                    return
                 new_x = pet_left_max
                 self._fsm.set_direction(-1)
                 self._fsm.notify_boundary_hit()
             else:
+                if not allow_climb:
+                    self._end_cursor_chase()
+                    return
                 new_x = self._max_pet_x()
                 self._fsm.set_direction(-1)
                 self._fsm.notify_boundary_hit()
 
         new_x = self._clamp_x(new_x)
         self.move(new_x, self._clamp_y(ledge.stand_y))
+
+    def _maybe_start_cursor_chase(self) -> None:
+        if not self.isVisible() or random.random() >= CURSOR_CHASE_CHANCE:
+            return
+        cursor = QCursor.pos()
+        if not self._is_cursor_on_same_ledge(cursor):
+            return
+        pet_center_x = self.pos().x() + PET_WIDTH // 2
+        if abs(cursor.x() - pet_center_x) <= CURSOR_SIT_DISTANCE_PX:
+            return
+        self._cursor_still_ms = 0
+        self._last_cursor_pos = cursor
+        self._cursor_chase_ms_left = random.randint(
+            CURSOR_CHASE_MIN_MS,
+            CURSOR_CHASE_MAX_MS,
+        )
+        self._fsm.begin_cursor_chase()
+
+    def _cursor_chase_tick(self) -> None:
+        self._cursor_chase_ms_left -= FALL_TICK_MS
+        if self._cursor_chase_ms_left <= 0:
+            self._end_cursor_chase()
+            return
+
+        cursor = QCursor.pos()
+        if not self._is_cursor_on_same_ledge(cursor):
+            self._end_cursor_chase()
+            return
+
+        pet_center_x = self.pos().x() + PET_WIDTH // 2
+        dx = cursor.x() - pet_center_x
+        self._track_cursor_stillness(cursor)
+
+        if abs(dx) <= CURSOR_SIT_DISTANCE_PX and self._cursor_still_ms >= CURSOR_STILL_MS:
+            self._cursor_sit_active = True
+            self._fsm.begin_sit()
+            return
+
+        direction = 1 if dx > 0 else -1
+        if dx == 0:
+            direction = self._fsm.direction
+        self._fsm.set_direction(direction)
+        self._move_on_ledge(direction, allow_climb=False)
+
+    def _monitor_cursor_sit(self) -> None:
+        cursor = QCursor.pos()
+        if not self._is_cursor_on_same_ledge(cursor):
+            self._cursor_sit_active = False
+            self._fsm.resume()
+            self._fsm.force_state(PetState.IDLE)
+            return
+
+        self._track_cursor_stillness(cursor)
+        if self._cursor_still_ms < CURSOR_STILL_MS:
+            self._cursor_sit_active = False
+            self._cursor_chase_ms_left = random.randint(
+                CURSOR_CHASE_MIN_MS,
+                CURSOR_CHASE_MAX_MS,
+            )
+            self._fsm.begin_cursor_chase()
+            return
+
+        self._fsm.extend_sit()
+
+    def _end_cursor_chase(self) -> None:
+        self._cursor_still_ms = 0
+        self._last_cursor_pos = None
+        self._cursor_chase_ms_left = 0
+        self._fsm.force_state(PetState.IDLE)
+
+    def _is_cursor_on_same_ledge(self, cursor: QPoint) -> bool:
+        pos = self.pos()
+        ledge = self._active_ledge or self._surfaces.find_ledge_at(pos.x(), pos.y())
+        if ledge is None:
+            return False
+
+        pet_screen = self._nearest_screen(pos)
+        cursor_screen = QGuiApplication.screenAt(cursor)
+        if pet_screen is None or cursor_screen != pet_screen:
+            return False
+
+        feet_y = pos.y() + PET_HEIGHT
+        if abs(cursor.y() - feet_y) > CURSOR_Y_TOLERANCE_PX:
+            return False
+
+        cursor_x = cursor.x()
+        return ledge.left <= cursor_x <= ledge.right
+
+    def _track_cursor_stillness(self, cursor: QPoint) -> None:
+        if self._last_cursor_pos is not None:
+            moved_x = abs(cursor.x() - self._last_cursor_pos.x())
+            moved_y = abs(cursor.y() - self._last_cursor_pos.y())
+            if (
+                moved_x <= CURSOR_STILL_TOLERANCE_PX
+                and moved_y <= CURSOR_STILL_TOLERANCE_PX
+            ):
+                self._cursor_still_ms += FALL_TICK_MS
+            else:
+                self._cursor_still_ms = 0
+        self._last_cursor_pos = cursor
 
     def _nudge_on_ledge(self, dx: int) -> None:
         """Move horizontally while staying on the current ledge."""
@@ -635,7 +791,7 @@ class PetWindow(QWidget):
 
     def _handle_peer_interactions(self) -> None:
         """Bump, nudge, and turn around when walking into another pet."""
-        if self._fsm.state != PetState.WALKING or not self.isVisible():
+        if self._fsm.state not in (PetState.WALKING, PetState.CHASING_CURSOR) or not self.isVisible():
             return
 
         my_rect = self.frameGeometry()
@@ -663,6 +819,12 @@ class PetWindow(QWidget):
                 and self._pet_index >= peer._pet_index
             ):
                 continue
+            if (
+                peer._fsm.state == PetState.CHASING_CURSOR
+                and self._fsm.state == PetState.CHASING_CURSOR
+                and self._pet_index >= peer._pet_index
+            ):
+                continue
 
             peer_center_x = peer_rect.center().x()
             dx = my_center_x - peer_center_x
@@ -673,9 +835,14 @@ class PetWindow(QWidget):
             self._nudge_on_ledge(nudge)
             peer.apply_peer_nudge(-nudge)
             self._fsm.flip_direction()
+            if self._fsm.state == PetState.CHASING_CURSOR:
+                self._end_cursor_chase()
+                return
 
             if peer._fsm.state == PetState.WALKING:
                 peer._fsm.flip_direction()
+            elif peer._fsm.state == PetState.CHASING_CURSOR:
+                peer._end_cursor_chase()
             elif (
                 peer._fsm.state in (PetState.IDLE, PetState.SIT)
                 and random.random() < PEER_SIT_ON_BUMP_CHANCE
@@ -831,6 +998,9 @@ class PetWindow(QWidget):
         if event.button() != Qt.MouseButton.LeftButton:
             return
         self._is_dragging = True
+        self._cursor_sit_active = False
+        self._cursor_still_ms = 0
+        self._cursor_chase_ms_left = 0
         self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
         self._fsm.pause()
         self._fsm.force_state(PetState.DRAGGED)
