@@ -52,13 +52,23 @@ python main.py
 
 You can package py-shimeji into a folder you can zip and share — no Python install required on the recipient's machine.
 
-### Quick build (PowerShell)
+### Quick build
+
+**Git Bash / macOS / Linux:**
+
+```bash
+./scripts/build.sh
+```
+
+**PowerShell:**
 
 ```powershell
 .\scripts\build.ps1
 ```
 
-This creates `dist\py-shimeji\` with `py-shimeji.exe` and bundled dependencies. Zip that folder to share.
+This creates `dist/py-shimeji/` with `py-shimeji.exe` and bundled dependencies. Zip that folder to share.
+
+> In Git Bash, use `./scripts/build.sh` — not `.\scripts\build.ps1` (backslashes are escape characters in bash).
 
 ### Manual build
 
@@ -113,7 +123,8 @@ py-shimeji/
 ├── sprite_picker_dialog.py  # Visual sprite pack picker
 ├── py-shimeji.spec  # PyInstaller build spec
 ├── scripts/
-│   └── build.ps1    # One-command Windows build script
+│   ├── build.sh     # One-command build (Git Bash / Unix)
+│   └── build.ps1    # One-command build (PowerShell)
 ├── assets/
 │   └── sprites/
 │       ├── pet_1/   # PNG set for pet 1
