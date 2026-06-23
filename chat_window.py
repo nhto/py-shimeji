@@ -36,16 +36,21 @@ from config import (
     CHAT_MAX_HISTORY,
     CHAT_MAX_IMAGE_BYTES,
     CHAT_MODELS,
+    CHAT_NO_API_KEY_GREETINGS,
+    CHAT_NO_API_KEY_SEND_LABELS,
     CHAT_SEND_LABELS,
+    CHAT_STATUS_OFFLINE_LABELS,
+    CHAT_STATUS_ONLINE_LABELS,
     CHAT_WINDOW_GAP_PX,
     CHAT_WINDOW_HEIGHT,
     CHAT_WINDOW_WIDTH,
-    OPENROUTER_API_KEY,
     OPENROUTER_API_URL,
     build_chat_system_prompt,
     chat_model_supports_images,
     get_chat_language,
     get_chat_model,
+    get_openrouter_api_key,
+    has_openrouter_api_key,
     set_chat_language,
     set_chat_model,
 )
@@ -103,7 +108,7 @@ class ChatWorker(QThread):
         self._model = model
 
     def run(self) -> None:
-        if not OPENROUTER_API_KEY:
+        if not has_openrouter_api_key():
             self.failed.emit("OpenRouter API key is not configured.")
             return
 
@@ -118,7 +123,7 @@ class ChatWorker(QThread):
             data=body,
             method="POST",
             headers={
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Authorization": f"Bearer {get_openrouter_api_key()}",
                 "Content-Type": "application/json",
                 "HTTP-Referer": "https://github.com/py-shimeji",
                 "X-Title": "py-shimeji",
@@ -202,7 +207,11 @@ class ChatWindow(QWidget):
         self._pending_image_name: str | None = None
         self._setup_window()
         self._build_ui()
-        self._append_bubu_message(CHAT_GREETINGS[self._language])
+        self._update_api_key_state()
+        if has_openrouter_api_key():
+            self._append_bubu_message(CHAT_GREETINGS[self._language])
+        else:
+            self._append_bubu_message(CHAT_NO_API_KEY_GREETINGS[self._language])
 
     @classmethod
     def open_chat(
@@ -221,8 +230,15 @@ class ChatWindow(QWidget):
         cls._instance.show()
         cls._instance.raise_()
         cls._instance.activateWindow()
+        cls._instance._update_api_key_state()
         cls._instance._input.setFocus()
         return cls._instance
+
+    @classmethod
+    def refresh_api_key_state(cls) -> None:
+        """Update the open chat window after the API key changes."""
+        if cls._instance is not None:
+            cls._instance._update_api_key_state()
 
     def _set_pet(self, pet: PetWindow) -> None:
         if self._pet is pet:
@@ -440,6 +456,8 @@ class ChatWindow(QWidget):
         status.setObjectName("statusDot")
         subtitle = QLabel("Online")
         subtitle.setObjectName("chatSubtitle")
+        self._status_dot = status
+        self._status_subtitle = subtitle
         subtitle_row.addWidget(status)
         subtitle_row.addWidget(subtitle)
         subtitle_row.addStretch()
@@ -680,14 +698,38 @@ class ChatWindow(QWidget):
     def _localized(self, labels: dict[str, str]) -> str:
         return labels.get(self._language, labels["en"])
 
-    def _update_input_labels(self) -> None:
-        self._input.setPlaceholderText(
-            CHAT_INPUT_PLACEHOLDERS.get(self._language, CHAT_INPUT_PLACEHOLDERS["en"])
-        )
-        if self._worker is None:
-            self._send_button.setText(
-                CHAT_SEND_LABELS.get(self._language, CHAT_SEND_LABELS["en"])
+    def _update_api_key_state(self) -> None:
+        """Reflect whether OpenRouter is configured in the header and composer."""
+        configured = has_openrouter_api_key()
+        if configured:
+            self._status_subtitle.setText(
+                self._localized(CHAT_STATUS_ONLINE_LABELS)
             )
+            self._status_dot.setStyleSheet("color: #4ade80; font-size: 10px;")
+            self._input.setPlaceholderText(
+                CHAT_INPUT_PLACEHOLDERS.get(
+                    self._language,
+                    CHAT_INPUT_PLACEHOLDERS["en"],
+                )
+            )
+        else:
+            self._status_subtitle.setText(
+                self._localized(CHAT_STATUS_OFFLINE_LABELS)
+            )
+            self._status_dot.setStyleSheet("color: #f87171; font-size: 10px;")
+            self._input.setPlaceholderText(
+                self._localized(CHAT_NO_API_KEY_SEND_LABELS)
+            )
+
+        enabled = configured and self._worker is None
+        self._input.setEnabled(enabled)
+        self._send_button.setEnabled(enabled)
+        self._attach_button.setEnabled(enabled)
+        self._model_picker.setEnabled(enabled)
+        self._language_picker.setEnabled(True)
+
+    def _update_input_labels(self) -> None:
+        self._update_api_key_state()
         self._update_attach_button_state()
 
     def _update_image_upload_visibility(self) -> None:
@@ -742,11 +784,12 @@ class ChatWindow(QWidget):
         self._update_attach_button_state()
 
     def _set_busy(self, busy: bool) -> None:
-        self._input.setEnabled(not busy)
-        self._send_button.setEnabled(not busy)
-        self._attach_button.setEnabled(not busy)
-        self._model_picker.setEnabled(not busy)
-        self._language_picker.setEnabled(not busy)
+        configured = has_openrouter_api_key()
+        self._input.setEnabled(configured and not busy)
+        self._send_button.setEnabled(configured and not busy)
+        self._attach_button.setEnabled(configured and not busy)
+        self._model_picker.setEnabled(configured and not busy)
+        self._language_picker.setEnabled(True)
         if busy:
             self._send_button.setText("...")
         else:
@@ -755,6 +798,10 @@ class ChatWindow(QWidget):
             )
 
     def _send_message(self) -> None:
+        if not has_openrouter_api_key():
+            self._append_bubu_message(self._localized(CHAT_NO_API_KEY_SEND_LABELS))
+            return
+
         text = self._input.text().strip()
         has_image = self._pending_image_data_url is not None
         if (not text and not has_image) or self._worker is not None:

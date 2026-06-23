@@ -27,6 +27,7 @@ class PetState(Enum):
     IDLE = auto()
     SIT = auto()
     WALKING = auto()
+    CHASING_CURSOR = auto()
     CLIMBING = auto()
     FALLING = auto()
     DRAGGED = auto()
@@ -104,6 +105,15 @@ class PetStateMachine(QObject):
         self._next_idle_walk_ms = self._random_sit_duration()
         self._transition(PetState.SIT)
 
+    def begin_cursor_chase(self) -> None:
+        """Walk toward the mouse cursor on the current ledge."""
+        self._transition(PetState.CHASING_CURSOR)
+
+    def extend_sit(self) -> None:
+        """Reset the sit timer (e.g. while sitting under a still cursor)."""
+        if self._state == PetState.SIT:
+            self._next_idle_walk_ms = self._random_sit_duration()
+
     def notify_boundary_hit(self) -> None:
         """Called when the pet reaches a horizontal screen edge while walking."""
         if self._state == PetState.WALKING:
@@ -118,6 +128,7 @@ class PetStateMachine(QObject):
             PetState.DRAGGED,
             PetState.FALLING,
             PetState.CLIMBING,
+            PetState.CHASING_CURSOR,
         ):
             return
 
