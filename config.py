@@ -5,12 +5,37 @@ from __future__ import annotations
 import json
 import os
 import random
+import sys
 from pathlib import Path
 
 
-def _load_dotenv() -> None:
+def _is_frozen() -> bool:
+    """True when running from a PyInstaller bundle."""
+    return getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
+
+
+def _app_data_root() -> Path:
+    """
+    Writable directory for .env and JSON settings.
+
+    In a frozen build this is the folder containing the executable so user
+    settings survive updates when the app is replaced.
+    """
+    if _is_frozen():
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+def _bundle_root() -> Path:
+    """Read-only bundle root (PyInstaller extract dir, or project root in dev)."""
+    if _is_frozen():
+        return Path(sys._MEIPASS)
+    return Path(__file__).resolve().parent
+
+
+def _load_dotenv(root: Path) -> None:
     """Load key=value pairs from a local .env file when present."""
-    env_path = Path(__file__).resolve().parent / ".env"
+    env_path = root / ".env"
     if not env_path.is_file():
         return
     for line in env_path.read_text(encoding="utf-8").splitlines():
@@ -24,14 +49,15 @@ def _load_dotenv() -> None:
             os.environ[key] = value
 
 
-_load_dotenv()
-
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 
-PROJECT_ROOT: Path = Path(__file__).resolve().parent
-SPRITES_ROOT: Path = PROJECT_ROOT / "assets" / "sprites"
+PROJECT_ROOT: Path = _app_data_root()
+BUNDLE_ROOT: Path = _bundle_root()
+SPRITES_ROOT: Path = BUNDLE_ROOT / "assets" / "sprites"
+
+_load_dotenv(PROJECT_ROOT)
 
 # Legacy alias (shared folder before per-pet directories).
 ASSETS_DIR: Path = SPRITES_ROOT

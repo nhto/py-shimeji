@@ -48,6 +48,52 @@ Keys saved from the tray menu are written to `.env` and take effect immediately 
 python main.py
 ```
 
+## Build a standalone app (Windows)
+
+You can package py-shimeji into a folder you can zip and share — no Python install required on the recipient's machine.
+
+### Quick build (PowerShell)
+
+```powershell
+.\scripts\build.ps1
+```
+
+This creates `dist\py-shimeji\` with `py-shimeji.exe` and bundled dependencies. Zip that folder to share.
+
+### Manual build
+
+```bash
+pip install -r requirements-dev.txt
+pyinstaller --noconfirm --clean py-shimeji.spec
+```
+
+On Windows, copy the env template next to the executable (the build script does this automatically):
+
+```powershell
+Copy-Item -Force .env.example dist\py-shimeji\.env.example
+```
+
+### Share the build
+
+1. Run the build (above).
+2. Zip the entire `dist\py-shimeji\` folder (~100 MB).
+3. Recipients unzip anywhere and run `py-shimeji.exe` — no Python install needed.
+4. Optional: rename `.env.example` to `.env` and add an OpenRouter key, or set the key from the tray menu after first launch.
+
+### After building
+
+| Item | Location when running the `.exe` |
+|------|----------------------------------|
+| Default sprites | Bundled inside the app |
+| `.env` (API key) | Next to `py-shimeji.exe` (created when you save a key from the tray) |
+| `.app_settings.json` | Next to `py-shimeji.exe` |
+| `.chat_settings.json` | Next to `py-shimeji.exe` |
+| Custom sprite folders | Any path you pick in the tray (unchanged) |
+
+A copy of `.env.example` is placed next to the executable so recipients can configure chat manually if they prefer.
+
+**Note:** Window climbing (walking on title bars) works on Windows only, same as the Python source build. The packaged app is built and tested for Windows.
+
 ## Project layout
 
 ```
@@ -60,14 +106,22 @@ py-shimeji/
 ├── display.py       # Monitor / taskbar geometry change handling
 ├── tray.py          # System tray icon and menu
 ├── chat_window.py   # Bubu chat panel (OpenRouter)
+├── speech_bubble.py # On-pet ambient / chat speech bubbles
 ├── api_key_dialog.py  # OpenRouter API key settings dialog
 ├── behavior_settings_dialog.py  # Speed, chase, pet count, ambient speech
+├── dialog_theme.py  # Shared styling for dialogs and chat
+├── sprite_picker_dialog.py  # Visual sprite pack picker
+├── py-shimeji.spec  # PyInstaller build spec
+├── scripts/
+│   └── build.ps1    # One-command Windows build script
 ├── assets/
 │   └── sprites/
 │       ├── pet_1/   # PNG set for pet 1
 │       └── pet_2/   # PNG set for pet 2
+├── requirements.txt
+├── requirements-dev.txt  # PyInstaller and other build tools
 ├── .env.example     # Template for OPENROUTER_API_KEY
-└── requirements.txt
+└── README.md
 ```
 
 ## Sprites (optional)
