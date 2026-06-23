@@ -173,16 +173,24 @@ class SurfaceTracker:
         return best
 
     def find_landing_ledge(
-        self, pet_x: int, pet_y: int, next_feet_y: int
+        self,
+        pet_x: int,
+        pet_y: int,
+        next_feet_y: int,
+        exclude_ledge_id: str | None = None,
     ) -> HorizontalLedge | None:
         """Pick the topmost ledge the pet would land on while falling."""
         current_feet = pet_y + PET_HEIGHT - 1
         best: HorizontalLedge | None = None
         for ledge in self._horizontal:
+            if exclude_ledge_id is not None and ledge.ledge_id == exclude_ledge_id:
+                continue
             if not ledge.contains_pet_x(pet_x):
                 continue
             surface_feet = ledge.stand_y + PET_HEIGHT - 1
-            if current_feet <= surface_feet <= next_feet_y:
+            # Require feet to be strictly above the surface so a fall starting on
+            # a ledge does not re-land on the same perch on the first tick.
+            if current_feet < surface_feet <= next_feet_y:
                 if best is None or ledge.stand_y < best.stand_y:
                     best = ledge
         return best
