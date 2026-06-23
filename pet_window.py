@@ -15,6 +15,7 @@ from PyQt6.QtGui import (
     QContextMenuEvent,
     QCursor,
     QGuiApplication,
+    QHideEvent,
     QImage,
     QMouseEvent,
     QPaintEvent,
@@ -50,8 +51,10 @@ from config import (
     SURFACE_REFRESH_MS,
     TOP_PERCH_MARGIN_PX,
     WALK_SPEED_PX,
-    get_pet_sprites_dir,
+    format_speech_bubble_text,
+    set_saved_pet_sprites_dir,
 )
+from speech_bubble import SpeechBubbleWindow
 from states import PetState, PetStateMachine
 from surfaces import HorizontalLedge, SurfaceTracker, VerticalLedge
 
@@ -236,12 +239,17 @@ class PetWindow(QWidget):
         self._last_cursor_pos: QPoint | None = None
         self._cursor_chase_ms_left: int = 0
         self._idle_chase_accum_ms: int = 0
+        self._speech_bubble: SpeechBubbleWindow | None = None
 
         self._fsm = PetStateMachine(self._on_fsm_state_changed, parent=self)
 
         self._setup_window()
         self._setup_timers()
         self._place_on_floor()
+
+    @property
+    def pet_index(self) -> int:
+        return self._pet_index
 
     @property
     def sprites_dir(self) -> Path:
@@ -270,7 +278,33 @@ class PetWindow(QWidget):
         self._sprites_dir = sprites_dir
         self._sprites.reload(sprites_dir)
         self._frame_index = 0
+        set_saved_pet_sprites_dir(self._pet_index, sprites_dir)
         self.update()
+
+    def show_speech_bubble(self, text: str) -> None:
+        """Show a short-lived speech bubble above the pet."""
+        bubble_text = format_speech_bubble_text(text)
+        if bubble_text is None or not self.isVisible():
+            return
+        if self._speech_bubble is None:
+            self._speech_bubble = SpeechBubbleWindow(self)
+        self._speech_bubble.show_text(bubble_text)
+
+    def _reposition_speech_bubble(self) -> None:
+        if self._speech_bubble is not None and self._speech_bubble.isVisible():
+            self._speech_bubble.reposition()
+
+    def _hide_speech_bubble(self) -> None:
+        if self._speech_bubble is not None:
+            self._speech_bubble.hide()
+
+    def move(self, *args) -> None:  # noqa: ANN002
+        super().move(*args)
+        self._reposition_speech_bubble()
+
+    def hideEvent(self, event: QHideEvent) -> None:  # noqa: N802
+        self._hide_speech_bubble()
+        super().hideEvent(event)
 
     def set_peer_pets(self, peers: list[PetWindow]) -> None:
         """Register other pets for overlap detection and nudging."""

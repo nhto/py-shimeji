@@ -27,6 +27,7 @@ htmlcov/
 .env.*
 !.env.example
 .chat_settings.json
+.app_settings.json
 
 # IDE and editor
 .vscode/

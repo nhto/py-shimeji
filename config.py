@@ -44,6 +44,9 @@ SPRITE_FILES: dict[str, list[str]] = {
     "drag": ["drag_1.png"],
 }
 
+# States whose PNGs are nice-to-have; idle is used when sit frames are missing.
+SPRITE_OPTIONAL_STATES: frozenset[str] = frozenset({"sit"})
+
 # ---------------------------------------------------------------------------
 # Window & pet dimensions
 # ---------------------------------------------------------------------------
@@ -256,22 +259,22 @@ CHAT_GREETINGS: dict[str, str] = {
 CHAT_NO_API_KEY_GREETINGS: dict[str, str] = {
     "en": (
         "Hi! I'm Bubu. I'd love to chat, but no OpenRouter API key is set yet. "
-        "Use OpenRouter API key... in the tray menu to add one."
+        "Use Preference in the tray menu to add one."
     ),
     "zh-Hans": (
         "你好！我是 Bubu。我很想聊天，但还没有配置 OpenRouter API 密钥。"
-        "请在托盘菜单中选择 OpenRouter API key... 进行设置。"
+        "请在托盘菜单中选择「偏好设置」进行设置。"
     ),
     "zh-Hant": (
         "你好！我是 Bubu。我很想聊天，但還沒有設定 OpenRouter API 金鑰。"
-        "請在系統匣選單中選擇 OpenRouter API key... 進行設定。"
+        "請在系統匣選單中選擇「偏好設定」進行設定。"
     ),
 }
 
 CHAT_NO_API_KEY_SEND_LABELS: dict[str, str] = {
-    "en": "Add your OpenRouter API key from the tray menu to chat.",
-    "zh-Hans": "请从托盘菜单设置 OpenRouter API 密钥后再聊天。",
-    "zh-Hant": "請從系統匣選單設定 OpenRouter API 金鑰後再聊天。",
+    "en": "Add your OpenRouter API key from Preference in the tray menu to chat.",
+    "zh-Hans": "请从托盘菜单的「偏好设置」设置 OpenRouter API 密钥后再聊天。",
+    "zh-Hant": "請從系統匣選單的「偏好設定」設定 OpenRouter API 金鑰後再聊天。",
 }
 
 CHAT_STATUS_ONLINE_LABELS: dict[str, str] = {
@@ -286,12 +289,272 @@ CHAT_STATUS_OFFLINE_LABELS: dict[str, str] = {
     "zh-Hant": "未設定金鑰",
 }
 
-TRAY_NO_API_KEY_TITLE: str = "py-shimeji — chat unavailable"
-TRAY_NO_API_KEY_MESSAGE: str = (
-    "Choose OpenRouter API key... in the tray menu to chat with Bubu."
-)
-TRAY_API_KEY_SAVED_MESSAGE: str = "OpenRouter API key saved. You can chat with Bubu now."
-TRAY_API_KEY_CLEARED_MESSAGE: str = "OpenRouter API key removed. Chat is disabled."
+CHAT_STATUS_TYPING_LABELS: dict[str, str] = {
+    "en": "Typing...",
+    "zh-Hans": "正在回复...",
+    "zh-Hant": "正在回覆...",
+}
+
+CHAT_TYPING_PHRASE_LABELS: dict[str, str] = {
+    "en": "Bubu is thinking",
+    "zh-Hans": "Bubu 正在思考",
+    "zh-Hant": "Bubu 正在思考",
+}
+
+CHAT_TYPING_INTERVAL_MS: int = 380
+
+TRAY_NO_API_KEY_TITLE_LABELS: dict[str, str] = {
+    "en": "py-shimeji — chat unavailable",
+    "zh-Hans": "py-shimeji — 无法聊天",
+    "zh-Hant": "py-shimeji — 無法聊天",
+}
+
+TRAY_NO_API_KEY_MESSAGE_LABELS: dict[str, str] = {
+    "en": (
+        "Open Preference in the tray menu to add an OpenRouter API key and chat with Bubu."
+    ),
+    "zh-Hans": "在托盘菜单中打开「偏好设置」以添加 OpenRouter API 密钥并与 Bubu 聊天。",
+    "zh-Hant": "在系統匣選單中開啟「偏好設定」以新增 OpenRouter API 金鑰並與 Bubu 聊天。",
+}
+
+TRAY_API_KEY_SAVED_MESSAGE_LABELS: dict[str, str] = {
+    "en": "OpenRouter API key saved. You can chat with Bubu now.",
+    "zh-Hans": "OpenRouter API 密钥已保存。现在可以与 Bubu 聊天了。",
+    "zh-Hant": "OpenRouter API 金鑰已儲存。現在可以與 Bubu 聊天了。",
+}
+
+TRAY_API_KEY_CLEARED_MESSAGE_LABELS: dict[str, str] = {
+    "en": "OpenRouter API key removed. Chat is disabled.",
+    "zh-Hans": "OpenRouter API 密钥已移除。聊天功能已禁用。",
+    "zh-Hant": "OpenRouter API 金鑰已移除。聊天功能已停用。",
+}
+
+TRAY_PREFERENCES_SAVED_MESSAGE_LABELS: dict[str, str] = {
+    "en": "Preferences saved.",
+    "zh-Hans": "偏好设置已保存。",
+    "zh-Hant": "偏好設定已儲存。",
+}
+
+TRAY_HIDE_PET_LABELS: dict[str, str] = {
+    "en": "Hide Pet {index}",
+    "zh-Hans": "隐藏宠物 {index}",
+    "zh-Hant": "隱藏寵物 {index}",
+}
+
+TRAY_SHOW_PET_LABELS: dict[str, str] = {
+    "en": "Show Pet {index}",
+    "zh-Hans": "显示宠物 {index}",
+    "zh-Hant": "顯示寵物 {index}",
+}
+
+TRAY_CHANGE_SPRITES_LABELS: dict[str, str] = {
+    "en": "Change Pet {index} sprites...",
+    "zh-Hans": "更改宠物 {index} 形象...",
+    "zh-Hant": "更改寵物 {index} 形象...",
+}
+
+TRAY_SELECT_SPRITES_TITLE_LABELS: dict[str, str] = {
+    "en": "Select sprite folder for Pet {index}",
+    "zh-Hans": "选择宠物 {index} 的形象文件夹",
+    "zh-Hant": "選擇寵物 {index} 的形象資料夾",
+}
+
+SPRITE_PICKER_TITLE_LABELS: dict[str, str] = {
+    "en": "Pet {index} appearance",
+    "zh-Hans": "宠物 {index} 形象",
+    "zh-Hant": "寵物 {index} 形象",
+}
+
+SPRITE_PICKER_INTRO_LABELS: dict[str, str] = {
+    "en": "Choose a sprite set, or browse for a custom folder.",
+    "zh-Hans": "选择一套形象，或浏览自定义文件夹。",
+    "zh-Hant": "選擇一套形象，或瀏覽自訂資料夾。",
+}
+
+SPRITE_PICKER_FILES_HEADING_LABELS: dict[str, str] = {
+    "en": "PNG files in the folder",
+    "zh-Hans": "文件夹中的 PNG 文件",
+    "zh-Hant": "資料夾中的 PNG 檔案",
+}
+
+SPRITE_STATE_LABELS: dict[str, dict[str, str]] = {
+    "idle": {"en": "Idle", "zh-Hans": "待机", "zh-Hant": "待機"},
+    "walk": {"en": "Walk", "zh-Hans": "行走", "zh-Hant": "行走"},
+    "sit": {"en": "Sit", "zh-Hans": "坐下", "zh-Hant": "坐下"},
+    "fall": {"en": "Fall", "zh-Hans": "下落", "zh-Hant": "下落"},
+    "drag": {"en": "Drag", "zh-Hans": "拖拽", "zh-Hant": "拖曳"},
+}
+
+SPRITE_PICKER_OPTIONAL_LABELS: dict[str, str] = {
+    "en": "optional",
+    "zh-Hans": "可选",
+    "zh-Hant": "選用",
+}
+
+SPRITE_PICKER_BROWSE_LABELS: dict[str, str] = {
+    "en": "Browse folder…",
+    "zh-Hans": "浏览文件夹…",
+    "zh-Hant": "瀏覽資料夾…",
+}
+
+SPRITE_PICKER_APPLY_LABELS: dict[str, str] = {
+    "en": "Apply",
+    "zh-Hans": "应用",
+    "zh-Hant": "套用",
+}
+
+SPRITE_PICKER_CANCEL_LABELS: dict[str, str] = {
+    "en": "Cancel",
+    "zh-Hans": "取消",
+    "zh-Hant": "取消",
+}
+
+SPRITE_PICKER_INVALID_FOLDER_LABELS: dict[str, str] = {
+    "en": "That folder does not contain any supported sprite PNGs.",
+    "zh-Hans": "该文件夹不包含任何支持的形象 PNG 文件。",
+    "zh-Hant": "該資料夾不包含任何支援的形象 PNG 檔案。",
+}
+
+TRAY_CHAT_LABELS: dict[str, str] = {
+    "en": "Chat with bubu",
+    "zh-Hans": "与 bubu 聊天",
+    "zh-Hant": "與 bubu 聊天",
+}
+
+TRAY_PREFERENCE_LABELS: dict[str, str] = {
+    "en": "Preference",
+    "zh-Hans": "偏好设置",
+    "zh-Hant": "偏好設定",
+}
+
+TRAY_CLICK_THROUGH_LABELS: dict[str, str] = {
+    "en": "Click-through (pass mouse clicks)",
+    "zh-Hans": "穿透点击（鼠标穿透）",
+    "zh-Hant": "穿透點擊（滑鼠穿透）",
+}
+
+TRAY_CLICK_THROUGH_TOOLTIP_LABELS: dict[str, str] = {
+    "en": "When enabled, pets ignore the mouse. Disable to drag them.",
+    "zh-Hans": "启用后宠物会忽略鼠标。关闭后可拖动。",
+    "zh-Hant": "啟用後寵物會忽略滑鼠。關閉後可拖動。",
+}
+
+TRAY_QUIT_LABELS: dict[str, str] = {
+    "en": "Quit",
+    "zh-Hans": "退出",
+    "zh-Hant": "退出",
+}
+
+PREFERENCES_TITLE_LABELS: dict[str, str] = {
+    "en": "Preferences",
+    "zh-Hans": "偏好设置",
+    "zh-Hant": "偏好設定",
+}
+
+PREFERENCES_OPENROUTER_HEADING_LABELS: dict[str, str] = {
+    "en": "OpenRouter configuration",
+    "zh-Hans": "OpenRouter 配置",
+    "zh-Hant": "OpenRouter 設定",
+}
+
+PREFERENCES_OPENROUTER_INTRO_LABELS: dict[str, str] = {
+    "en": (
+        "Bubu uses OpenRouter for chat. Your key is stored locally in "
+        "<b>.env</b> and is only sent to OpenRouter when you message Bubu."
+    ),
+    "zh-Hans": (
+        "Bubu 使用 OpenRouter 进行聊天。你的密钥保存在本地 "
+        "<b>.env</b> 文件中，仅在你向 Bubu 发送消息时才会发送给 OpenRouter。"
+    ),
+    "zh-Hant": (
+        "Bubu 使用 OpenRouter 進行聊天。你的金鑰保存在本機 "
+        "<b>.env</b> 檔案中，僅在你向 Bubu 傳送訊息時才會傳送給 OpenRouter。"
+    ),
+}
+
+PREFERENCES_API_KEY_LABELS: dict[str, str] = {
+    "en": "API key",
+    "zh-Hans": "API 密钥",
+    "zh-Hant": "API 金鑰",
+}
+
+PREFERENCES_KEY_HINT_LABELS: dict[str, str] = {
+    "en": "Leave blank and click Save to keep the current key.",
+    "zh-Hans": "留空并点击保存以保留当前密钥。",
+    "zh-Hant": "留空並點擊儲存以保留目前金鑰。",
+}
+
+PREFERENCES_KEY_LINK_LABELS: dict[str, str] = {
+    "en": '<a href="https://openrouter.ai/keys">Get a key at openrouter.ai/keys</a>',
+    "zh-Hans": '<a href="https://openrouter.ai/keys">在 openrouter.ai/keys 获取密钥</a>',
+    "zh-Hant": '<a href="https://openrouter.ai/keys">在 openrouter.ai/keys 取得金鑰</a>',
+}
+
+PREFERENCES_LANGUAGE_HEADING_LABELS: dict[str, str] = {
+    "en": "Language",
+    "zh-Hans": "语言",
+    "zh-Hant": "語言",
+}
+
+PREFERENCES_LANGUAGE_HINT_LABELS: dict[str, str] = {
+    "en": "Choose the language Bubu uses when replying in chat.",
+    "zh-Hans": "选择 Bubu 在聊天中回复时使用的语言。",
+    "zh-Hant": "選擇 Bubu 在聊天中回覆時使用的語言。",
+}
+
+PREFERENCES_CLEAR_KEY_LABELS: dict[str, str] = {
+    "en": "Clear key",
+    "zh-Hans": "清除密钥",
+    "zh-Hant": "清除金鑰",
+}
+
+PREFERENCES_SAVE_LABELS: dict[str, str] = {
+    "en": "Save",
+    "zh-Hans": "保存",
+    "zh-Hant": "儲存",
+}
+
+PREFERENCES_CANCEL_LABELS: dict[str, str] = {
+    "en": "Cancel",
+    "zh-Hans": "取消",
+    "zh-Hant": "取消",
+}
+
+PREFERENCES_STATUS_CONFIGURED_LABELS: dict[str, str] = {
+    "en": "Status: configured ({masked})",
+    "zh-Hans": "状态：已配置（{masked}）",
+    "zh-Hant": "狀態：已設定（{masked}）",
+}
+
+PREFERENCES_STATUS_NOT_CONFIGURED_LABELS: dict[str, str] = {
+    "en": "Status: not configured",
+    "zh-Hans": "状态：未配置",
+    "zh-Hant": "狀態：未設定",
+}
+
+PREFERENCES_STATUS_ENTER_KEY_LABELS: dict[str, str] = {
+    "en": "Status: enter a key before saving.",
+    "zh-Hans": "状态：保存前请输入密钥。",
+    "zh-Hant": "狀態：儲存前請輸入金鑰。",
+}
+
+UI_LANGUAGE_LABELS: dict[str, dict[str, str]] = {
+    "en": {
+        "en": "English",
+        "zh-Hans": "Simplified Chinese",
+        "zh-Hant": "Traditional Chinese",
+    },
+    "zh-Hans": {
+        "en": "英语",
+        "zh-Hans": "简体中文",
+        "zh-Hant": "繁体中文",
+    },
+    "zh-Hant": {
+        "en": "英語",
+        "zh-Hans": "簡體中文",
+        "zh-Hant": "繁體中文",
+    },
+}
 
 CHAT_INPUT_PLACEHOLDERS: dict[str, str] = {
     "en": "Say something to Bubu...",
@@ -342,6 +605,19 @@ def get_chat_language() -> str:
     if isinstance(language, str) and language in _valid_chat_language_ids():
         return language
     return CHAT_DEFAULT_LANGUAGE
+
+
+def localized(labels: dict[str, str], language: str | None = None) -> str:
+    """Return a UI string for the given or current language."""
+    lang = language if language in _valid_chat_language_ids() else get_chat_language()
+    return labels.get(lang, labels["en"])
+
+
+def language_option_labels(ui_language: str | None = None) -> list[tuple[str, str]]:
+    """Return (language_id, display_label) pairs for language pickers."""
+    ui_lang = ui_language if ui_language in _valid_chat_language_ids() else get_chat_language()
+    names = UI_LANGUAGE_LABELS.get(ui_lang, UI_LANGUAGE_LABELS["en"])
+    return [(lang_id, names.get(lang_id, fallback)) for lang_id, fallback in CHAT_LANGUAGES]
 
 
 def set_chat_language(language_id: str) -> None:
@@ -414,6 +690,19 @@ def get_pet_sprites_dir(pet_index: int) -> Path:
     """
     Return the sprite folder for a pet.
 
+    Uses a persisted path when saved and still valid, otherwise the default
+    ``assets/sprites/pet_N/`` folder (with legacy fallback for pet 1).
+    """
+    saved = get_saved_pet_sprites_dir(pet_index)
+    if saved is not None:
+        return saved
+    return _default_pet_sprites_dir(pet_index)
+
+
+def _default_pet_sprites_dir(pet_index: int) -> Path:
+    """
+    Default sprite folder for a pet without persisted overrides.
+
     Each pet loads PNGs from ``assets/sprites/pet_N/`` (N is 1-based).
     Pet 1 falls back to the legacy flat ``assets/sprites/`` folder when
     ``pet_1/`` does not exist but shared sprite files are present.
@@ -436,3 +725,172 @@ def pet_has_sprites(sprites_dir: Path) -> bool:
     if not sprites_dir.is_dir():
         return False
     return any((sprites_dir / name).is_file() for names in SPRITE_FILES.values() for name in names)
+
+
+def iter_sprite_file_entries() -> list[tuple[str, str, bool]]:
+    """Return ``(state, filename, optional)`` for every expected sprite PNG."""
+    entries: list[tuple[str, str, bool]] = []
+    for state, filenames in SPRITE_FILES.items():
+        optional = state in SPRITE_OPTIONAL_STATES
+        for filename in filenames:
+            entries.append((state, filename, optional))
+    return entries
+
+
+def sprite_state_label(state: str, language: str | None = None) -> str:
+    """Localized label for a sprite animation state."""
+    labels = SPRITE_STATE_LABELS.get(state, {})
+    if language and language in labels:
+        return labels[language]
+    return labels.get("en", state)
+
+
+def discover_sprite_packs(extra_dirs: Path | list[Path] | None = None) -> list[Path]:
+    """
+    Return sprite folders that contain at least one valid PNG.
+
+    Scans built-in ``assets/sprites/`` (including one level of subfolders) and
+    any extra paths supplied by the caller (e.g. the pet's current folder).
+    """
+    found: dict[str, Path] = {}
+
+    def add_if_valid(path: Path) -> None:
+        resolved = path.resolve()
+        if pet_has_sprites(resolved):
+            found[str(resolved)] = resolved
+
+    if SPRITES_ROOT.is_dir():
+        add_if_valid(SPRITES_ROOT)
+        for child in sorted(SPRITES_ROOT.iterdir()):
+            if not child.is_dir():
+                continue
+            add_if_valid(child)
+            for sub in sorted(child.iterdir()):
+                if sub.is_dir():
+                    add_if_valid(sub)
+
+    extras = extra_dirs if isinstance(extra_dirs, list) else ([extra_dirs] if extra_dirs else [])
+    for path in extras:
+        if path is not None:
+            add_if_valid(path)
+
+    return sorted(found.values(), key=_sprite_pack_sort_key)
+
+
+def sprite_pack_display_name(path: Path, language: str | None = None) -> str:
+    """Human-readable label for a sprite folder in the picker grid."""
+    _ = language
+    try:
+        rel = path.resolve().relative_to(SPRITES_ROOT.resolve())
+        return str(rel).replace("\\", " / ")
+    except ValueError:
+        return path.name or str(path)
+
+
+def _sprite_pack_sort_key(path: Path) -> tuple[int, str]:
+    try:
+        rel = path.resolve().relative_to(SPRITES_ROOT.resolve())
+        return (0, str(rel).lower())
+    except ValueError:
+        return (1, str(path).lower())
+
+
+# ---------------------------------------------------------------------------
+# App settings (pet sprites, visibility)
+# ---------------------------------------------------------------------------
+
+_APP_SETTINGS_PATH: Path = PROJECT_ROOT / ".app_settings.json"
+
+
+def _load_app_settings() -> dict:
+    if _APP_SETTINGS_PATH.is_file():
+        try:
+            data = json.loads(_APP_SETTINGS_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+        except (OSError, json.JSONDecodeError, TypeError):
+            pass
+    return {}
+
+
+def _save_app_settings(data: dict) -> None:
+    _APP_SETTINGS_PATH.write_text(
+        json.dumps(data, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _pet_settings_entry(pet_index: int) -> dict:
+    pets = _load_app_settings().get("pets", {})
+    if not isinstance(pets, dict):
+        return {}
+    entry = pets.get(str(pet_index), {})
+    return entry if isinstance(entry, dict) else {}
+
+
+def get_saved_pet_sprites_dir(pet_index: int) -> Path | None:
+    """Return a persisted sprite folder when it still exists on disk."""
+    raw = _pet_settings_entry(pet_index).get("sprites_dir")
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    path = Path(raw)
+    return path if path.is_dir() else None
+
+
+def set_saved_pet_sprites_dir(pet_index: int, sprites_dir: Path) -> None:
+    """Persist the sprite folder for a pet."""
+    data = _load_app_settings()
+    pets = data.setdefault("pets", {})
+    if not isinstance(pets, dict):
+        pets = {}
+        data["pets"] = pets
+    entry = pets.setdefault(str(pet_index), {})
+    if not isinstance(entry, dict):
+        entry = {}
+        pets[str(pet_index)] = entry
+    entry["sprites_dir"] = str(sprites_dir.resolve())
+    _save_app_settings(data)
+
+
+def get_saved_pet_visible(pet_index: int) -> bool | None:
+    """Return persisted visibility, or None to use the startup default."""
+    entry = _pet_settings_entry(pet_index)
+    if "visible" not in entry:
+        return None
+    return bool(entry["visible"])
+
+
+def set_saved_pet_visible(pet_index: int, visible: bool) -> None:
+    """Persist whether a pet should be shown on startup."""
+    data = _load_app_settings()
+    pets = data.setdefault("pets", {})
+    if not isinstance(pets, dict):
+        pets = {}
+        data["pets"] = pets
+    entry = pets.setdefault(str(pet_index), {})
+    if not isinstance(entry, dict):
+        entry = {}
+        pets[str(pet_index)] = entry
+    entry["visible"] = visible
+    _save_app_settings(data)
+
+
+# ---------------------------------------------------------------------------
+# On-pet speech bubbles (short chat replies)
+# ---------------------------------------------------------------------------
+
+SPEECH_BUBBLE_MAX_CHARS: int = 120
+SPEECH_BUBBLE_DURATION_MS: int = 7_000
+SPEECH_BUBBLE_GAP_PX: int = 6
+SPEECH_BUBBLE_MAX_WIDTH: int = 210
+SPEECH_BUBBLE_PADDING_PX: int = 10
+
+
+def format_speech_bubble_text(text: str) -> str | None:
+    """Return bubble text for short replies, or None when too long for a bubble."""
+    collapsed = " ".join(text.split())
+    if not collapsed:
+        return None
+    if len(collapsed) > SPEECH_BUBBLE_MAX_CHARS:
+        return None
+    return collapsed
