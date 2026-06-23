@@ -50,3 +50,7 @@ class DisplayChangeWatcher(QObject):
     def _on_display_changed(self, *_args: object) -> None:
         for pet in self._pets:
             pet.handle_display_changed()
+
+    def set_pets(self, pets: list[PetWindow]) -> None:
+        """Update the pet list when pets are added or removed at runtime."""
+        self._pets = pets

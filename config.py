@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 from pathlib import Path
 
 
@@ -93,6 +94,8 @@ MIN_WINDOW_HEIGHT: int = 80
 # ---------------------------------------------------------------------------
 
 MAX_PETS: int = 2
+MIN_PET_COUNT: int = 1
+MAX_PET_COUNT: int = 4
 
 # ---------------------------------------------------------------------------
 # AI chat (OpenRouter)
@@ -427,6 +430,90 @@ TRAY_PREFERENCE_LABELS: dict[str, str] = {
     "zh-Hant": "偏好設定",
 }
 
+TRAY_BEHAVIOR_LABELS: dict[str, str] = {
+    "en": "Pet behavior...",
+    "zh-Hans": "宠物行为...",
+    "zh-Hant": "寵物行為...",
+}
+
+TRAY_BEHAVIOR_SAVED_MESSAGE_LABELS: dict[str, str] = {
+    "en": "Pet behavior settings saved.",
+    "zh-Hans": "宠物行为设置已保存。",
+    "zh-Hant": "寵物行為設定已儲存。",
+}
+
+BEHAVIOR_DIALOG_TITLE_LABELS: dict[str, str] = {
+    "en": "Pet behavior",
+    "zh-Hans": "宠物行为",
+    "zh-Hant": "寵物行為",
+}
+
+BEHAVIOR_DIALOG_INTRO_LABELS: dict[str, str] = {
+    "en": "Adjust how pets move and interact on your desktop.",
+    "zh-Hans": "调整宠物在桌面上的移动与互动方式。",
+    "zh-Hant": "調整寵物在桌面上的移動與互動方式。",
+}
+
+BEHAVIOR_SPEED_LABELS: dict[str, str] = {
+    "en": "Movement speed: {value}%",
+    "zh-Hans": "移动速度：{value}%",
+    "zh-Hant": "移動速度：{value}%",
+}
+
+BEHAVIOR_SPEED_HINT_LABELS: dict[str, str] = {
+    "en": "Walk, climb, and fall speed.",
+    "zh-Hans": "行走、攀爬与下落速度。",
+    "zh-Hant": "行走、攀爬與下落速度。",
+}
+
+BEHAVIOR_CHASE_LABELS: dict[str, str] = {
+    "en": "Cursor chase chance: {value}%",
+    "zh-Hans": "追逐鼠标概率：{value}%",
+    "zh-Hant": "追逐滑鼠機率：{value}%",
+}
+
+BEHAVIOR_CHASE_HINT_LABELS: dict[str, str] = {
+    "en": "How often idle pets walk toward your cursor.",
+    "zh-Hans": "待机宠物走向鼠标的频率。",
+    "zh-Hant": "待機寵物走向滑鼠的頻率。",
+}
+
+BEHAVIOR_PET_COUNT_LABELS: dict[str, str] = {
+    "en": "Number of pets",
+    "zh-Hans": "宠物数量",
+    "zh-Hant": "寵物數量",
+}
+
+BEHAVIOR_PET_COUNT_HINT_LABELS: dict[str, str] = {
+    "en": "Between {min} and {max}. Extra pets appear immediately.",
+    "zh-Hans": "范围 {min}–{max}。额外的宠物会立即出现。",
+    "zh-Hant": "範圍 {min}–{max}。額外的寵物會立即出現。",
+}
+
+BEHAVIOR_AMBIENT_LABELS: dict[str, str] = {
+    "en": "Ambient speech bubbles",
+    "zh-Hans": "随机说话气泡",
+    "zh-Hant": "隨機說話氣泡",
+}
+
+BEHAVIOR_AMBIENT_HINT_LABELS: dict[str, str] = {
+    "en": "Pets occasionally say short phrases while wandering.",
+    "zh-Hans": "宠物闲逛时会偶尔说些简短的话。",
+    "zh-Hant": "寵物閒逛時會偶爾說些簡短的話。",
+}
+
+BEHAVIOR_SAVE_LABELS: dict[str, str] = {
+    "en": "Save",
+    "zh-Hans": "保存",
+    "zh-Hant": "儲存",
+}
+
+BEHAVIOR_CANCEL_LABELS: dict[str, str] = {
+    "en": "Cancel",
+    "zh-Hans": "取消",
+    "zh-Hant": "取消",
+}
+
 TRAY_CLICK_THROUGH_LABELS: dict[str, str] = {
     "en": "Click-through (pass mouse clicks)",
     "zh-Hans": "穿透点击（鼠标穿透）",
@@ -675,6 +762,20 @@ CURSOR_STILL_MS: int = 700
 CURSOR_STILL_TOLERANCE_PX: int = 10
 CURSOR_Y_TOLERANCE_PX: int = 56
 
+# User-tunable behavior defaults (overridden via tray settings / .app_settings.json).
+BEHAVIOR_SPEED_PERCENT_DEFAULT: int = 100
+BEHAVIOR_SPEED_PERCENT_MIN: int = 50
+BEHAVIOR_SPEED_PERCENT_MAX: int = 200
+
+BEHAVIOR_CURSOR_CHASE_DEFAULT: float = CURSOR_CHASE_CHANCE
+BEHAVIOR_CURSOR_CHASE_MIN: float = 0.0
+BEHAVIOR_CURSOR_CHASE_MAX: float = 1.0
+
+AMBIENT_SPEECH_ENABLED_DEFAULT: bool = True
+AMBIENT_SPEECH_INTERVAL_MIN_MS: int = 45_000
+AMBIENT_SPEECH_INTERVAL_MAX_MS: int = 120_000
+AMBIENT_SPEECH_EVENT_CHANCE: float = 0.35
+
 # ---------------------------------------------------------------------------
 # Fallback rendering (used when sprite files are missing)
 # ---------------------------------------------------------------------------
@@ -900,6 +1001,168 @@ def set_saved_pets_paused(paused: bool) -> None:
     data = _load_app_settings()
     data["pets_paused"] = paused
     _save_app_settings(data)
+
+
+def _behavior_settings() -> dict:
+    behavior = _load_app_settings().get("behavior", {})
+    return behavior if isinstance(behavior, dict) else {}
+
+
+def _clamp_int(value: object, minimum: int, maximum: int, default: int) -> int:
+    try:
+        number = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(number, maximum))
+
+
+def _clamp_float(value: object, minimum: float, maximum: float, default: float) -> float:
+    try:
+        number = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(number, maximum))
+
+
+def get_speed_percent() -> int:
+    """Return the user movement speed as a percentage of the base speed."""
+    raw = _behavior_settings().get("speed_percent", BEHAVIOR_SPEED_PERCENT_DEFAULT)
+    return _clamp_int(
+        raw,
+        BEHAVIOR_SPEED_PERCENT_MIN,
+        BEHAVIOR_SPEED_PERCENT_MAX,
+        BEHAVIOR_SPEED_PERCENT_DEFAULT,
+    )
+
+
+def get_cursor_chase_chance() -> float:
+    """Return the probability (0–1) that an idle pet starts chasing the cursor."""
+    raw = _behavior_settings().get("cursor_chase_chance", BEHAVIOR_CURSOR_CHASE_DEFAULT)
+    return _clamp_float(
+        raw,
+        BEHAVIOR_CURSOR_CHASE_MIN,
+        BEHAVIOR_CURSOR_CHASE_MAX,
+        BEHAVIOR_CURSOR_CHASE_DEFAULT,
+    )
+
+
+def get_saved_pet_count() -> int:
+    """Return how many pets to spawn (persisted, or MAX_PETS by default)."""
+    raw = _behavior_settings().get("pet_count", MAX_PETS)
+    return _clamp_int(raw, MIN_PET_COUNT, MAX_PET_COUNT, MAX_PETS)
+
+
+def get_ambient_speech_enabled() -> bool:
+    """Return whether pets should show ambient speech bubbles."""
+    raw = _behavior_settings().get("ambient_speech_enabled", AMBIENT_SPEECH_ENABLED_DEFAULT)
+    if isinstance(raw, bool):
+        return raw
+    return AMBIENT_SPEECH_ENABLED_DEFAULT
+
+
+def get_effective_walk_speed_px() -> int:
+    return max(1, round(WALK_SPEED_PX * get_speed_percent() / 100))
+
+
+def get_effective_climb_speed_px() -> int:
+    return max(1, round(CLIMB_SPEED_PX * get_speed_percent() / 100))
+
+
+def get_effective_gravity_px() -> int:
+    return max(1, round(GRAVITY_PX * get_speed_percent() / 100))
+
+
+def get_move_tick_ms() -> int:
+    """Movement timer interval; shorter when speed percent is higher."""
+    return max(1, round(FALL_TICK_MS * 100 / get_speed_percent()))
+
+
+def set_behavior_settings(
+    *,
+    speed_percent: int,
+    cursor_chase_chance: float,
+    pet_count: int,
+    ambient_speech_enabled: bool,
+) -> None:
+    """Persist pet behavior settings."""
+    data = _load_app_settings()
+    data["behavior"] = {
+        "speed_percent": _clamp_int(
+            speed_percent,
+            BEHAVIOR_SPEED_PERCENT_MIN,
+            BEHAVIOR_SPEED_PERCENT_MAX,
+            BEHAVIOR_SPEED_PERCENT_DEFAULT,
+        ),
+        "cursor_chase_chance": _clamp_float(
+            cursor_chase_chance,
+            BEHAVIOR_CURSOR_CHASE_MIN,
+            BEHAVIOR_CURSOR_CHASE_MAX,
+            BEHAVIOR_CURSOR_CHASE_DEFAULT,
+        ),
+        "pet_count": _clamp_int(pet_count, MIN_PET_COUNT, MAX_PET_COUNT, MAX_PETS),
+        "ambient_speech_enabled": bool(ambient_speech_enabled),
+    }
+    _save_app_settings(data)
+
+
+AMBIENT_SPEECH_PHRASES: dict[str, list[str]] = {
+    "en": [
+        "*yawn*",
+        "Hello~",
+        "Nice day!",
+        "Hmm…",
+        "La la la~",
+        "I'm bored.",
+        "Still here!",
+        "Zzz… just kidding.",
+    ],
+    "zh-Hans": [
+        "*打哈欠*",
+        "你好呀~",
+        "今天天气不错！",
+        "嗯……",
+        "啦啦啦~",
+        "有点无聊。",
+        "我还在哦！",
+        "zzz…开玩笑的。",
+    ],
+    "zh-Hant": [
+        "*打哈欠*",
+        "你好呀~",
+        "今天天氣不錯！",
+        "嗯……",
+        "啦啦啦~",
+        "有點無聊。",
+        "我還在哦！",
+        "zzz…開玩笑的。",
+    ],
+}
+
+AMBIENT_BUMP_PHRASES: dict[str, list[str]] = {
+    "en": ["Oof!", "Hey!", "Watch it!", "Boop."],
+    "zh-Hans": ["哎呀！", "嘿！", "看着点！", "咚。"],
+    "zh-Hant": ["哎呀！", "嘿！", "看著點！", "咚。"],
+}
+
+AMBIENT_LAND_PHRASES: dict[str, list[str]] = {
+    "en": ["Safe!", "That was a drop.", "Whew.", "Landed~"],
+    "zh-Hans": ["安全落地！", "好险。", "呼~", "着陆~"],
+    "zh-Hant": ["安全落地！", "好險。", "呼~", "著陸~"],
+}
+
+
+def get_ambient_phrase(event: str | None = None) -> str | None:
+    """Return a short ambient phrase for the current UI language."""
+    language = get_chat_language()
+    if event == "bump":
+        phrases = AMBIENT_BUMP_PHRASES.get(language, AMBIENT_BUMP_PHRASES["en"])
+    elif event == "land":
+        phrases = AMBIENT_LAND_PHRASES.get(language, AMBIENT_LAND_PHRASES["en"])
+    else:
+        phrases = AMBIENT_SPEECH_PHRASES.get(language, AMBIENT_SPEECH_PHRASES["en"])
+    if not phrases:
+        return None
+    return random.choice(phrases)
 
 
 # ---------------------------------------------------------------------------

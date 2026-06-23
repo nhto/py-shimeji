@@ -57,6 +57,25 @@ from config import (
     set_chat_language,
     set_chat_model,
 )
+from dialog_theme import (
+    CHAT_BUBU_BORDER,
+    CHAT_BUBU_BUBBLE_BG,
+    CHAT_BUBU_BUBBLE_FG,
+    CHAT_BUBU_LABEL_COLOR,
+    CHAT_BUBU_STREAMING_BORDER,
+    CHAT_TYPING_BUBBLE_BG,
+    CHAT_TYPING_BUBBLE_BORDER,
+    CHAT_TYPING_LABEL_COLOR,
+    CHAT_TYPING_TEXT_COLOR,
+    CHAT_USER_BORDER,
+    CHAT_USER_BUBBLE_BG,
+    CHAT_USER_BUBBLE_FG,
+    CHAT_USER_LABEL_COLOR,
+    STATUS_OFFLINE_COLOR,
+    STATUS_ONLINE_COLOR,
+    STATUS_TYPING_COLOR,
+    apply_light_chat_theme,
+)
 from pet_window import PetWindow
 
 
@@ -293,158 +312,7 @@ class ChatWindow(QWidget):
         self.setWindowTitle("Chat with Bubu")
         self.setFixedSize(CHAT_WINDOW_WIDTH, CHAT_WINDOW_HEIGHT)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setStyleSheet(
-            """
-            QWidget#chatCard {
-                background-color: #1a1625;
-                border: 1px solid #3d3654;
-                border-radius: 20px;
-            }
-            QWidget#chatHeader {
-                background-color: #221e30;
-                border-top-left-radius: 20px;
-                border-top-right-radius: 20px;
-                border-bottom: 1px solid #3d3654;
-            }
-            QLabel#chatTitle {
-                color: #f8fafc;
-                font-size: 15px;
-                font-weight: 700;
-            }
-            QLabel#chatSubtitle {
-                color: #cbd5e1;
-                font-size: 11px;
-            }
-            QLabel#statusDot {
-                color: #4ade80;
-                font-size: 10px;
-            }
-            QPushButton#closeButton {
-                background-color: transparent;
-                color: #cbd5e1;
-                border: 1px solid #4b4563;
-                border-radius: 10px;
-                padding: 2px 8px;
-                font-size: 12px;
-            }
-            QPushButton#closeButton:hover {
-                background-color: #3d3654;
-                color: #f8fafc;
-            }
-            QTextEdit#transcript {
-                background-color: #14111c;
-                border: 1px solid #2e2940;
-                border-radius: 12px;
-                padding: 8px 6px;
-            }
-            QFrame#composer {
-                background-color: #221e30;
-                border: 1px solid #3d3654;
-                border-radius: 16px;
-            }
-            QLineEdit#messageInput {
-                background-color: #14111c;
-                border: 1px solid #4b4563;
-                border-radius: 12px;
-                padding: 10px 12px;
-                color: #f8fafc;
-                selection-background-color: #6366f1;
-            }
-            QLineEdit#messageInput:focus {
-                border-color: #818cf8;
-            }
-            QPushButton#sendButton {
-                background-color: #f97316;
-                color: #1c1510;
-                border: none;
-                border-radius: 12px;
-                padding: 10px 18px;
-                font-weight: 700;
-            }
-            QPushButton#sendButton:hover {
-                background-color: #fb923c;
-            }
-            QPushButton#sendButton:disabled {
-                background-color: #3d3654;
-                color: #94a3b8;
-            }
-            QPushButton#sendButton[loading="true"] {
-                background-color: #7c2d12;
-                color: #fdba74;
-            }
-            QFrame#loadingBar {
-                background-color: #2e2940;
-                border: none;
-                max-height: 3px;
-                min-height: 3px;
-            }
-            QPushButton#attachButton {
-                background-color: #2a2638;
-                color: #e2e8f0;
-                border: 1px solid #4b4563;
-                border-radius: 12px;
-                padding: 10px 12px;
-                font-size: 14px;
-            }
-            QPushButton#attachButton:hover {
-                border-color: #818cf8;
-                color: #f8fafc;
-            }
-            QPushButton#attachButton:disabled {
-                background-color: #221e30;
-                color: #64748b;
-                border-color: #3d3654;
-            }
-            QPushButton#attachButton[attached="true"] {
-                border-color: #f97316;
-                color: #fdba74;
-            }
-            QLabel#attachmentChip {
-                color: #fdba74;
-                font-size: 11px;
-            }
-            QPushButton#removeAttachmentButton {
-                background-color: transparent;
-                color: #cbd5e1;
-                border: 1px solid #4b4563;
-                border-radius: 8px;
-                padding: 0 6px;
-                font-size: 11px;
-            }
-            QPushButton#removeAttachmentButton:hover {
-                background-color: #3d3654;
-                color: #f8fafc;
-            }
-            QComboBox#modelPicker,
-            QComboBox#languagePicker {
-                background-color: #14111c;
-                color: #e2e8f0;
-                border: 1px solid #4b4563;
-                border-radius: 8px;
-                padding: 2px 8px;
-                font-size: 11px;
-                min-height: 22px;
-            }
-            QComboBox#modelPicker:hover,
-            QComboBox#languagePicker:hover {
-                border-color: #818cf8;
-                color: #f8fafc;
-            }
-            QComboBox#modelPicker::drop-down,
-            QComboBox#languagePicker::drop-down {
-                border: none;
-                width: 18px;
-            }
-            QComboBox#modelPicker QAbstractItemView,
-            QComboBox#languagePicker QAbstractItemView {
-                background-color: #221e30;
-                color: #f8fafc;
-                border: 1px solid #4b4563;
-                selection-background-color: #6366f1;
-                selection-color: #f8fafc;
-            }
-            """
-        )
+        apply_light_chat_theme(self)
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
@@ -467,7 +335,7 @@ class ChatWindow(QWidget):
         avatar.setFixedSize(36, 36)
         avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         avatar.setStyleSheet(
-            "background-color: #f97316; color: #1c1510; border-radius: 18px; font-weight: 700;"
+            "background-color: #f97316; color: #ffffff; border-radius: 18px; font-weight: 700;"
         )
 
         title_block = QVBoxLayout()
@@ -677,19 +545,19 @@ class ChatWindow(QWidget):
         if is_user:
             sender = "You"
             align = "right"
-            label_color = "#a5b4fc"
-            bubble_bg = "#4f46e5"
-            bubble_fg = "#ffffff"
-            border = "border:1px solid #6366f1;"
+            label_color = CHAT_USER_LABEL_COLOR
+            bubble_bg = CHAT_USER_BUBBLE_BG
+            bubble_fg = CHAT_USER_BUBBLE_FG
+            border = CHAT_USER_BORDER
         else:
             sender = "Bubu"
             align = "left"
-            label_color = "#fdba74"
-            bubble_bg = "#2a2638"
-            bubble_fg = "#f1f5f9"
-            border = "border:1px solid #4b4563;"
+            label_color = CHAT_BUBU_LABEL_COLOR
+            bubble_bg = CHAT_BUBU_BUBBLE_BG
+            bubble_fg = CHAT_BUBU_BUBBLE_FG
+            border = CHAT_BUBU_BORDER
             if streaming:
-                border = "border:1px solid #f97316;"
+                border = CHAT_BUBU_STREAMING_BORDER
 
         return (
             f'<table width="100%" cellspacing="0" cellpadding="0" '
@@ -723,12 +591,12 @@ class ChatWindow(QWidget):
             f'<table width="100%" cellspacing="0" cellpadding="0" '
             f'style="margin-bottom:14px;">'
             f'<tr><td align="left" style="padding:0 4px;">'
-            f'<span style="font-size:10px; font-weight:600; color:#fdba74;">'
+            f'<span style="font-size:10px; font-weight:600; color:{CHAT_TYPING_LABEL_COLOR};">'
             f"Bubu</span><br/>"
             f'<table cellspacing="0" cellpadding="0" style="margin-top:4px;">'
-            f'<tr><td align="left" style="background-color:#2a2638; '
-            f"border:1px solid #4b4563; padding:12px 16px;\">"
-            f'<span style="color:#cbd5e1; font-size:12px;">{phrase}</span> '
+            f'<tr><td align="left" style="background-color:{CHAT_TYPING_BUBBLE_BG}; '
+            f"{CHAT_TYPING_BUBBLE_BORDER} padding:12px 16px;\">"
+            f'<span style="color:{CHAT_TYPING_TEXT_COLOR}; font-size:12px;">{phrase}</span> '
             f"{dots_html}"
             f"</td></tr></table>"
             f"</td></tr></table>"
@@ -750,14 +618,14 @@ class ChatWindow(QWidget):
             self._status_subtitle.setText(
                 self._localized(CHAT_STATUS_OFFLINE_LABELS)
             )
-            self._status_dot.setStyleSheet("color: #f87171; font-size: 10px;")
+            self._status_dot.setStyleSheet(f"color: {STATUS_OFFLINE_COLOR}; font-size: 10px;")
             return
         self._status_subtitle.setText(self._localized(CHAT_STATUS_ONLINE_LABELS))
-        self._status_dot.setStyleSheet("color: #4ade80; font-size: 10px;")
+        self._status_dot.setStyleSheet(f"color: {STATUS_ONLINE_COLOR}; font-size: 10px;")
 
     def _set_header_typing_status(self) -> None:
         self._status_subtitle.setText(self._localized(CHAT_STATUS_TYPING_LABELS))
-        self._status_dot.setStyleSheet("color: #fbbf24; font-size: 10px;")
+        self._status_dot.setStyleSheet(f"color: {STATUS_TYPING_COLOR}; font-size: 10px;")
 
     def _on_model_changed(self, index: int) -> None:
         if index < 0:
@@ -814,7 +682,7 @@ class ChatWindow(QWidget):
             self._status_subtitle.setText(
                 self._localized(CHAT_STATUS_OFFLINE_LABELS)
             )
-            self._status_dot.setStyleSheet("color: #f87171; font-size: 10px;")
+            self._status_dot.setStyleSheet(f"color: {STATUS_OFFLINE_COLOR}; font-size: 10px;")
 
         if configured:
             self._input.setPlaceholderText(

@@ -40,6 +40,15 @@ from config import (
     sprite_pack_display_name,
     sprite_state_label,
 )
+from dialog_theme import (
+    SPRITE_NAME_MISSING_STYLE,
+    SPRITE_NAME_OK_STYLE,
+    SPRITE_NAME_OPTIONAL_STYLE,
+    SPRITE_STATUS_MISSING_STYLE,
+    SPRITE_STATUS_OK_STYLE,
+    SPRITE_STATUS_OPTIONAL_STYLE,
+    apply_light_sprite_picker_theme,
+)
 from pet_window import PetWindow
 
 _THUMB_SIZE = 72
@@ -215,16 +224,16 @@ class _SpriteFilePanel(QFrame):
             )
             if present:
                 status_label.setText("✓")
-                status_label.setStyleSheet("color: #4ade80;")
-                name_label.setStyleSheet("color: #e2e8f0;")
+                status_label.setStyleSheet(SPRITE_STATUS_OK_STYLE)
+                name_label.setStyleSheet(SPRITE_NAME_OK_STYLE)
             elif optional:
                 status_label.setText("–")
-                status_label.setStyleSheet("color: #64748b;")
-                name_label.setStyleSheet("color: #94a3b8;")
+                status_label.setStyleSheet(SPRITE_STATUS_OPTIONAL_STYLE)
+                name_label.setStyleSheet(SPRITE_NAME_OPTIONAL_STYLE)
             else:
                 status_label.setText("✗")
-                status_label.setStyleSheet("color: #f87171;")
-                name_label.setStyleSheet("color: #fca5a5;")
+                status_label.setStyleSheet(SPRITE_STATUS_MISSING_STYLE)
+                name_label.setStyleSheet(SPRITE_NAME_MISSING_STYLE)
 
 
 class SpritePickerDialog(QDialog):
@@ -259,113 +268,7 @@ class SpritePickerDialog(QDialog):
         self.setModal(True)
         self.setMinimumWidth(380)
         self.setMaximumWidth(520)
-        self.setStyleSheet(
-            """
-            QWidget#spritePickerRoot {
-                background-color: #1a1625;
-                border: 1px solid #3d3654;
-                border-radius: 16px;
-            }
-            QLabel#spriteHeading {
-                color: #f8fafc;
-                font-size: 15px;
-                font-weight: 700;
-            }
-            QLabel#spriteIntro {
-                color: #94a3b8;
-                font-size: 11px;
-            }
-            QFrame#spriteFilePanel {
-                background-color: #14111c;
-                border: 1px solid #2e2940;
-                border-radius: 10px;
-            }
-            QLabel#spriteFilesHeading {
-                color: #cbd5e1;
-                font-size: 11px;
-                font-weight: 600;
-            }
-            QLabel#spriteFileState {
-                color: #94a3b8;
-                font-size: 11px;
-            }
-            QLabel#spriteFileName {
-                color: #e2e8f0;
-                font-size: 11px;
-                font-family: Consolas, "Courier New", monospace;
-            }
-            QLabel#spriteFileOptional {
-                color: #64748b;
-                font-size: 10px;
-            }
-            QLabel#spriteFileStatus {
-                font-size: 11px;
-                font-weight: 700;
-            }
-            QScrollArea#spriteScroll {
-                background-color: transparent;
-                border: none;
-            }
-            QWidget#spriteScrollBody {
-                background-color: transparent;
-            }
-            QFrame#spriteCard {
-                background-color: #221e30;
-                border: 2px solid #3d3654;
-                border-radius: 12px;
-            }
-            QFrame#spriteCard:hover {
-                border-color: #6366f1;
-                background-color: #2a2540;
-            }
-            QFrame#spriteCard[selected="true"] {
-                border-color: #818cf8;
-                background-color: #2d2850;
-            }
-            QLabel#spriteThumb {
-                background-color: #14111c;
-                border: 1px solid #2e2940;
-                border-radius: 10px;
-            }
-            QLabel#spriteName {
-                color: #e2e8f0;
-                font-size: 11px;
-            }
-            QPushButton#browseButton {
-                background-color: transparent;
-                color: #cbd5e1;
-                border: 1px solid #4b4563;
-                border-radius: 10px;
-                padding: 8px 14px;
-            }
-            QPushButton#browseButton:hover {
-                background-color: #3d3654;
-                color: #f8fafc;
-            }
-            QPushButton#applyButton {
-                background-color: #f97316;
-                color: #1c1510;
-                border: none;
-                border-radius: 10px;
-                padding: 8px 18px;
-                font-weight: 600;
-            }
-            QPushButton#applyButton:hover {
-                background-color: #fb923c;
-            }
-            QPushButton#cancelButton {
-                background-color: transparent;
-                color: #cbd5e1;
-                border: 1px solid #4b4563;
-                border-radius: 10px;
-                padding: 8px 14px;
-            }
-            QPushButton#cancelButton:hover {
-                background-color: #3d3654;
-                color: #f8fafc;
-            }
-            """
-        )
+        apply_light_sprite_picker_theme(self)
 
     def showEvent(self, event) -> None:  # type: ignore[override]
         super().showEvent(event)

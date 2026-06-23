@@ -61,6 +61,7 @@ py-shimeji/
 ├── tray.py          # System tray icon and menu
 ├── chat_window.py   # Bubu chat panel (OpenRouter)
 ├── api_key_dialog.py  # OpenRouter API key settings dialog
+├── behavior_settings_dialog.py  # Speed, chase, pet count, ambient speech
 ├── assets/
 │   └── sprites/
 │       ├── pet_1/   # PNG set for pet 1
@@ -107,11 +108,22 @@ You can also change a pet's sprites at runtime from the **system tray** menu: **
 - **Right-click** — open the tray menu at the pet
 - **Release on floor** — return to walking / idle
 - **Release in mid-air** — FALLING until the nearest ledge or floor
-- **System tray** — show/hide each pet, chat with Bubu, manage your OpenRouter API key, pause pets (reduce motion), toggle click-through, change sprite folders, or quit
+- **System tray** — show/hide each pet, chat with Bubu, manage preferences and pet behavior, pause pets (reduce motion), toggle click-through, change sprite folders, or quit
+
+## Pet behavior settings
+
+Open **Pet behavior...** from the system tray to adjust:
+
+- **Movement speed** — walk, climb, and fall speed (50%–200%)
+- **Cursor chase chance** — how often idle pets walk toward your mouse
+- **Number of pets** — 1–4; extra pets appear immediately without restarting
+- **Ambient speech bubbles** — short random phrases while pets wander, plus reactions when they bump or land
+
+Settings are saved to `.app_settings.json` and take effect right away.
 
 ## Multiple pets
 
-By default the app spawns **two** desktop pets (`MAX_PETS` in `config.py`). They start at different positions along the taskbar edge, load sprites from `assets/sprites/pet_1/` and `assets/sprites/pet_2/`, and use distinct fallback colors when PNGs are missing (pink and teal). Each pet has its own behavior, physics, and drag handling. Pets can bump and nudge each other when walking on the same ledge.
+By default the app spawns **two** desktop pets. You can change the count (1–4) from **Pet behavior...** in the tray. They start at different positions along the taskbar edge, load sprites from `assets/sprites/pet_1/` and `assets/sprites/pet_2/` (and `pet_3` / `pet_4` when added), and use distinct fallback colors when PNGs are missing (pink and teal). Each pet has its own behavior, physics, and drag handling. Pets can bump and nudge each other when walking on the same ledge.
 
 ## Behavior
 
@@ -123,7 +135,7 @@ By default the app spawns **two** desktop pets (`MAX_PETS` in `config.py`). They
 - **FALLING** — gravity until the nearest ledge or floor (`QScreen.availableGeometry()` respects taskbar/dock)
 - **DRAGGED** — user-controlled; normal animation pauses while held
 
-Cursor chase tuning constants (`CURSOR_CHASE_CHANCE`, `CURSOR_SIT_DISTANCE_PX`, etc.) live in `config.py`.
+Cursor chase tuning constants live in `config.py` and can be adjusted from **Pet behavior...** in the tray.
 
 ## Chat with Bubu
 

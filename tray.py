@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from PyQt6.QtCore import QPoint, Qt
 from PyQt6.QtGui import QAction, QBrush, QColor, QIcon, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from api_key_dialog import open_preferences_dialog
+from behavior_settings_dialog import open_behavior_settings_dialog
 from chat_window import ChatWindow
 from config import (
     FALLBACK_BODY_COLOR,
     FALLBACK_OUTLINE_COLOR,
+    MAX_PET_COUNT,
+    MIN_PET_COUNT,
     TRAY_API_KEY_CLEARED_MESSAGE_LABELS,
     TRAY_API_KEY_SAVED_MESSAGE_LABELS,
+    TRAY_BEHAVIOR_LABELS,
+    TRAY_BEHAVIOR_SAVED_MESSAGE_LABELS,
     TRAY_CHANGE_SPRITES_LABELS,
     TRAY_CHAT_LABELS,
     TRAY_CLICK_THROUGH_LABELS,
@@ -28,6 +35,7 @@ from config import (
     TRAY_SHOW_PET_LABELS,
     get_chat_language,
     get_pet_sprites_dir,
+    get_saved_pet_visible,
     get_saved_pets_paused,
     has_openrouter_api_key,
     localized,
@@ -36,6 +44,9 @@ from config import (
 )
 from pet_window import PetWindow
 from sprite_picker_dialog import open_sprite_picker_dialog
+
+if TYPE_CHECKING:
+    from display import DisplayChangeWatcher
 
 
 def _build_tray_icon() -> QIcon:
@@ -64,15 +75,53 @@ def _build_tray_icon() -> QIcon:
 class SystemTray:
     """Owns the tray icon and menu for the lifetime of the application."""
 
-    def __init__(self, app: QApplication, pets: list[PetWindow]) -> None:
+    def __init__(
+        self,
+        app: QApplication,
+        pets: list[PetWindow],
+        *,
+        exclude_hwnds: set[int] | None = None,
+        display_watcher: DisplayChangeWatcher | None = None,
+    ) -> None:
         self._app = app
         self._pets = pets
+        self._exclude_hwnds = exclude_hwnds if exclude_hwnds is not None else set()
+        self._display_watcher = display_watcher
         self._tray = QSystemTrayIcon(_build_tray_icon(), parent=pets[0] if pets else None)
         self._tray.setToolTip("py-shimeji")
 
-        menu = QMenu()
         self._visibility_actions: dict[int, QAction] = {}
-        for index, pet in enumerate(pets, start=1):
+        self._change_sprites_actions: dict[int, QAction] = {}
+        self._chat_action: QAction | None = None
+        self._preferences_action: QAction | None = None
+        self._behavior_action: QAction | None = None
+        self._pause_pets_action: QAction | None = None
+        self._click_through_action: QAction | None = None
+        self._quit_action: QAction | None = None
+
+        self._menu = self._build_menu()
+        self._menu_host_pet: PetWindow | None = None
+        self._menu.aboutToHide.connect(self._on_menu_closed)
+        self._tray.setContextMenu(self._menu)
+        self._tray.show()
+
+        self._apply_menu_language()
+
+        if not has_openrouter_api_key():
+            language = get_chat_language()
+            self._tray.showMessage(
+                localized(TRAY_NO_API_KEY_TITLE_LABELS, language),
+                localized(TRAY_NO_API_KEY_MESSAGE_LABELS, language),
+                QSystemTrayIcon.MessageIcon.Information,
+                8_000,
+            )
+
+    def _build_menu(self) -> QMenu:
+        menu = QMenu()
+        self._visibility_actions.clear()
+        self._change_sprites_actions.clear()
+
+        for index, pet in enumerate(self._pets, start=1):
             visible = pet.isVisible()
             action = QAction("", menu)
             action.setCheckable(True)
@@ -81,10 +130,9 @@ class SystemTray:
             menu.addAction(action)
             self._visibility_actions[index] = action
 
-        self._change_sprites_actions: dict[int, QAction] = {}
-        if pets:
+        if self._pets:
             menu.addSeparator()
-            for index, pet in enumerate(pets, start=1):
+            for index, pet in enumerate(self._pets, start=1):
                 change_action = QAction("", menu)
                 change_action.triggered.connect(
                     self._make_change_sprites_handler(pet, index)
@@ -101,6 +149,10 @@ class SystemTray:
         self._preferences_action = QAction("", menu)
         self._preferences_action.triggered.connect(self._open_preferences)
         menu.addAction(self._preferences_action)
+
+        self._behavior_action = QAction("", menu)
+        self._behavior_action.triggered.connect(self._open_behavior_settings)
+        menu.addAction(self._behavior_action)
 
         menu.addSeparator()
 
@@ -122,22 +174,15 @@ class SystemTray:
         self._quit_action.triggered.connect(self._quit)
         menu.addAction(self._quit_action)
 
-        self._menu = menu
-        self._menu_host_pet: PetWindow | None = None
-        menu.aboutToHide.connect(self._on_menu_closed)
-        self._tray.setContextMenu(menu)
-        self._tray.show()
+        return menu
 
-        self._apply_menu_language()
-
-        if not has_openrouter_api_key():
-            language = get_chat_language()
-            self._tray.showMessage(
-                localized(TRAY_NO_API_KEY_TITLE_LABELS, language),
-                localized(TRAY_NO_API_KEY_MESSAGE_LABELS, language),
-                QSystemTrayIcon.MessageIcon.Information,
-                8_000,
-            )
+    def _replace_menu(self) -> None:
+        old_menu = self._menu
+        self._menu = self._build_menu()
+        self._menu.aboutToHide.connect(self._on_menu_closed)
+        self._tray.setContextMenu(self._menu)
+        if old_menu is not None:
+            old_menu.deleteLater()
 
     def show_context_menu(self, global_pos: QPoint, pet: PetWindow | None = None) -> None:
         """Show the app menu at a screen position (e.g. pet right-click)."""
@@ -168,17 +213,24 @@ class SystemTray:
                 localized(TRAY_CHANGE_SPRITES_LABELS, lang).format(index=index)
             )
 
-        self._chat_action.setText(localized(TRAY_CHAT_LABELS, lang))
-        self._preferences_action.setText(localized(TRAY_PREFERENCE_LABELS, lang))
-        self._pause_pets_action.setText(localized(TRAY_PAUSE_PETS_LABELS, lang))
-        self._pause_pets_action.setToolTip(
-            localized(TRAY_PAUSE_PETS_TOOLTIP_LABELS, lang)
-        )
-        self._click_through_action.setText(localized(TRAY_CLICK_THROUGH_LABELS, lang))
-        self._click_through_action.setToolTip(
-            localized(TRAY_CLICK_THROUGH_TOOLTIP_LABELS, lang)
-        )
-        self._quit_action.setText(localized(TRAY_QUIT_LABELS, lang))
+        if self._chat_action is not None:
+            self._chat_action.setText(localized(TRAY_CHAT_LABELS, lang))
+        if self._preferences_action is not None:
+            self._preferences_action.setText(localized(TRAY_PREFERENCE_LABELS, lang))
+        if self._behavior_action is not None:
+            self._behavior_action.setText(localized(TRAY_BEHAVIOR_LABELS, lang))
+        if self._pause_pets_action is not None:
+            self._pause_pets_action.setText(localized(TRAY_PAUSE_PETS_LABELS, lang))
+            self._pause_pets_action.setToolTip(
+                localized(TRAY_PAUSE_PETS_TOOLTIP_LABELS, lang)
+            )
+        if self._click_through_action is not None:
+            self._click_through_action.setText(localized(TRAY_CLICK_THROUGH_LABELS, lang))
+            self._click_through_action.setToolTip(
+                localized(TRAY_CLICK_THROUGH_TOOLTIP_LABELS, lang)
+            )
+        if self._quit_action is not None:
+            self._quit_action.setText(localized(TRAY_QUIT_LABELS, lang))
 
     def _refresh_menu_state(self) -> None:
         language = get_chat_language()
@@ -192,22 +244,25 @@ class SystemTray:
             action.setText(self._pet_visibility_label(index, visible, language))
             action.blockSignals(False)
 
-        click_through = bool(self._pets) and all(pet.click_through for pet in self._pets)
-        self._click_through_action.blockSignals(True)
-        self._click_through_action.setChecked(click_through)
-        self._click_through_action.blockSignals(False)
+        if self._click_through_action is not None:
+            click_through = bool(self._pets) and all(pet.click_through for pet in self._pets)
+            self._click_through_action.blockSignals(True)
+            self._click_through_action.setChecked(click_through)
+            self._click_through_action.blockSignals(False)
 
-        motion_paused = bool(self._pets) and all(pet.motion_paused for pet in self._pets)
-        self._pause_pets_action.blockSignals(True)
-        self._pause_pets_action.setChecked(motion_paused)
-        self._pause_pets_action.blockSignals(False)
+        if self._pause_pets_action is not None:
+            motion_paused = bool(self._pets) and all(pet.motion_paused for pet in self._pets)
+            self._pause_pets_action.blockSignals(True)
+            self._pause_pets_action.setChecked(motion_paused)
+            self._pause_pets_action.blockSignals(False)
 
-        if has_openrouter_api_key():
-            self._chat_action.setToolTip("")
-        else:
-            self._chat_action.setToolTip(
-                localized(TRAY_NO_API_KEY_MESSAGE_LABELS, language)
-            )
+        if self._chat_action is not None:
+            if has_openrouter_api_key():
+                self._chat_action.setToolTip("")
+            else:
+                self._chat_action.setToolTip(
+                    localized(TRAY_NO_API_KEY_MESSAGE_LABELS, language)
+                )
 
     @staticmethod
     def _make_visibility_toggle(pet: PetWindow, action: QAction, index: int):
@@ -255,10 +310,76 @@ class SystemTray:
             pet.set_motion_paused(enabled)
         set_saved_pets_paused(enabled)
 
+    def _sync_peer_pets(self) -> None:
+        total = len(self._pets)
+        for index, pet in enumerate(self._pets):
+            pet.set_total_pet_count(total)
+            pet.set_peer_pets(
+                [other for other_index, other in enumerate(self._pets) if other_index != index]
+            )
+
+    def apply_pet_count(self, target: int) -> None:
+        """Add or remove pets to match *target* without restarting."""
+        target = max(MIN_PET_COUNT, min(MAX_PET_COUNT, target))
+        click_through = bool(self._pets) and all(pet.click_through for pet in self._pets)
+        motion_paused = bool(self._pets) and all(pet.motion_paused for pet in self._pets)
+
+        while len(self._pets) < target:
+            index = len(self._pets)
+            pet = PetWindow(
+                pet_index=index,
+                pet_count=target,
+                exclude_hwnds=self._exclude_hwnds,
+                sprites_dir=get_pet_sprites_dir(index),
+            )
+            pet.set_click_through(click_through)
+            pet.set_motion_paused(motion_paused)
+            pet.set_context_menu_handler(self.show_context_menu)
+            pet.apply_behavior_settings()
+            visible = get_saved_pet_visible(index)
+            if visible is None:
+                visible = pet.has_sprites
+            if visible:
+                pet.show()
+            self._pets.append(pet)
+
+        while len(self._pets) > target:
+            pet = self._pets.pop()
+            pet.hide()
+            pet.deleteLater()
+
+        self._sync_peer_pets()
+        if self._display_watcher is not None:
+            self._display_watcher.set_pets(self._pets)
+        self._replace_menu()
+        self._apply_menu_language()
+
     def _open_chat(self) -> None:
         pet = self._menu_host_pet or (self._pets[0] if self._pets else None)
         parent = self._pets[0] if self._pets else None
         ChatWindow.open_chat(parent, pet=pet)
+
+    def _open_behavior_settings(self) -> None:
+        parent = self._pets[0] if self._pets else None
+        pet = self._menu_host_pet or (self._pets[0] if self._pets else None)
+        dialog = open_behavior_settings_dialog(parent, pet=pet)
+        if dialog is None:
+            return
+
+        for existing_pet in self._pets:
+            existing_pet.apply_behavior_settings()
+
+        if dialog.pet_count != len(self._pets):
+            self.apply_pet_count(dialog.pet_count)
+
+        language = get_chat_language()
+        self._refresh_menu_state()
+        self._tray.showMessage(
+            "py-shimeji",
+            localized(TRAY_BEHAVIOR_SAVED_MESSAGE_LABELS, language),
+            QSystemTrayIcon.MessageIcon.Information,
+            5_000,
+        )
 
     def _open_preferences(self) -> None:
         parent = self._pets[0] if self._pets else None
