@@ -212,6 +212,7 @@ class PetWindow(QWidget):
         self._play_area: QRect = QRect()
         self._surfaces = SurfaceTracker()
         self._active_ledge: HorizontalLedge | None = None
+        self._fall_exclude_ledge_id: str | None = None
         self._climb_ledge: VerticalLedge | None = None
         self._climb_direction: int = -1  # -1 = up, 1 = down
         self._click_through: bool = False
@@ -594,18 +595,29 @@ class PetWindow(QWidget):
                     self._start_climb(vertical, direction=1)
                     return
             if ledge.ledge_id != "screen":
-                self._start_fall()
-                return
-            new_x = self._min_pet_x()
-            self._fsm.set_direction(1)
-            self._fsm.notify_boundary_hit()
+                # Turn at window ledge ends; falling re-lands on the same perch
+                # (find_landing_ledge matches the current surface on the first tick).
+                new_x = pet_left_min
+                self._fsm.set_direction(1)
+                self._fsm.notify_boundary_hit()
+            else:
+                new_x = self._min_pet_x()
+                self._fsm.set_direction(1)
+                self._fsm.notify_boundary_hit()
         elif new_x > pet_left_max:
+            if ledge.ledge_id != "screen" and direction > 0:
+                vertical = self._surfaces.vertical_for_window(ledge.hwnd, "right")
+                if vertical is not None:
+                    self._start_climb(vertical, direction=1)
+                    return
             if ledge.ledge_id != "screen":
-                self._start_fall()
-                return
-            new_x = self._max_pet_x()
-            self._fsm.set_direction(-1)
-            self._fsm.notify_boundary_hit()
+                new_x = pet_left_max
+                self._fsm.set_direction(-1)
+                self._fsm.notify_boundary_hit()
+            else:
+                new_x = self._max_pet_x()
+                self._fsm.set_direction(-1)
+                self._fsm.notify_boundary_hit()
 
         new_x = self._clamp_x(new_x)
         self.move(new_x, self._clamp_y(ledge.stand_y))
@@ -733,6 +745,9 @@ class PetWindow(QWidget):
         self._fsm.force_state(PetState.CLIMBING)
 
     def _start_fall(self) -> None:
+        self._fall_exclude_ledge_id = (
+            self._active_ledge.ledge_id if self._active_ledge is not None else None
+        )
         self._active_ledge = None
         self._climb_ledge = None
         self._fsm.force_state(PetState.FALLING)
@@ -744,11 +759,17 @@ class PetWindow(QWidget):
         pos = self.pos()
         new_y = pos.y() + GRAVITY_PX
         next_feet_y = new_y + PET_HEIGHT - 1
-        landing = self._surfaces.find_landing_ledge(pos.x(), pos.y(), next_feet_y)
+        landing = self._surfaces.find_landing_ledge(
+            pos.x(),
+            pos.y(),
+            next_feet_y,
+            exclude_ledge_id=self._fall_exclude_ledge_id,
+        )
         if landing is not None:
             land_x = self._clamp_x(pos.x())
             self.move(land_x, self._clamp_y(landing.stand_y))
             self._active_ledge = landing
+            self._fall_exclude_ledge_id = None
             self._fall_timer.stop()
             self._fsm.resume()
             self._fsm.begin_walking()
@@ -757,11 +778,25 @@ class PetWindow(QWidget):
             land_x = self._clamp_x(pos.x())
             self.move(land_x, self._clamp_y(floor.stand_y))
             self._active_ledge = floor
+            self._fall_exclude_ledge_id = None
             self._fall_timer.stop()
             self._fsm.resume()
             self._fsm.begin_walking()
         else:
             self.move(self._clamp_x(pos.x()), self._clamp_y(new_y))
+            if self._fall_exclude_ledge_id is not None:
+                excluded = next(
+                    (
+                        ledge
+                        for ledge in self._surfaces.horizontal_ledges()
+                        if ledge.ledge_id == self._fall_exclude_ledge_id
+                    ),
+                    None,
+                )
+                if excluded is not None:
+                    excluded_feet = excluded.stand_y + PET_HEIGHT - 1
+                    if next_feet_y > excluded_feet:
+                        self._fall_exclude_ledge_id = None
 
     def _is_on_support(self) -> bool:
         self._refresh_surfaces()
