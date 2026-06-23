@@ -96,7 +96,75 @@ MAX_PETS: int = 2
 # ---------------------------------------------------------------------------
 
 OPENROUTER_API_URL: str = "https://openrouter.ai/api/v1/chat/completions"
-OPENROUTER_API_KEY: str = os.environ.get("OPENROUTER_API_KEY", "")
+ENV_FILE_PATH: Path = PROJECT_ROOT / ".env"
+
+_OPENROUTER_KEY_PLACEHOLDERS: frozenset[str] = frozenset(
+    {
+        "",
+        "your-openrouter-api-key-here",
+    }
+)
+
+
+def get_openrouter_api_key() -> str:
+    """Return the current OpenRouter API key from the process environment."""
+    return os.environ.get("OPENROUTER_API_KEY", "").strip()
+
+
+# Legacy alias; prefer get_openrouter_api_key() after runtime updates.
+OPENROUTER_API_KEY: str = get_openrouter_api_key()
+
+
+def has_openrouter_api_key() -> bool:
+    """True when a non-placeholder OpenRouter API key is configured."""
+    key = get_openrouter_api_key()
+    return key.lower() not in {p.lower() for p in _OPENROUTER_KEY_PLACEHOLDERS}
+
+
+def set_openrouter_api_key(key: str) -> None:
+    """Persist an OpenRouter API key to .env and apply it for this session."""
+    normalized = key.strip()
+    os.environ["OPENROUTER_API_KEY"] = normalized
+    _persist_env_var("OPENROUTER_API_KEY", normalized)
+
+
+def _persist_env_var(name: str, value: str) -> None:
+    """Update or remove a single key=value entry in the local .env file."""
+    lines: list[str] = []
+    if ENV_FILE_PATH.is_file():
+        lines = ENV_FILE_PATH.read_text(encoding="utf-8").splitlines()
+
+    new_lines: list[str] = []
+    found = False
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            new_lines.append(line)
+            continue
+
+        key, _ = stripped.split("=", 1)
+        if key.strip() == name:
+            found = True
+            if value:
+                new_lines.append(f"{name}={value}")
+        else:
+            new_lines.append(line)
+
+    if value and not found:
+        if new_lines and new_lines[-1].strip():
+            new_lines.append("")
+        new_lines.append(f"{name}={value}")
+
+    if not new_lines and value:
+        new_lines = [
+            "# Get a key at https://openrouter.ai/keys",
+            f"{name}={value}",
+        ]
+
+    content = "\n".join(new_lines)
+    if content and not content.endswith("\n"):
+        content += "\n"
+    ENV_FILE_PATH.write_text(content, encoding="utf-8")
 
 CHAT_MODELS: list[tuple[str, str]] = [
     ("openrouter/owl-alpha", "Owl Alpha"),
@@ -185,6 +253,46 @@ CHAT_GREETINGS: dict[str, str] = {
     "zh-Hant": "你好！我是 Bubu。隨便問我什麼吧——我很樂意一邊陪你逛桌面一邊聊天。",
 }
 
+CHAT_NO_API_KEY_GREETINGS: dict[str, str] = {
+    "en": (
+        "Hi! I'm Bubu. I'd love to chat, but no OpenRouter API key is set yet. "
+        "Use OpenRouter API key... in the tray menu to add one."
+    ),
+    "zh-Hans": (
+        "你好！我是 Bubu。我很想聊天，但还没有配置 OpenRouter API 密钥。"
+        "请在托盘菜单中选择 OpenRouter API key... 进行设置。"
+    ),
+    "zh-Hant": (
+        "你好！我是 Bubu。我很想聊天，但還沒有設定 OpenRouter API 金鑰。"
+        "請在系統匣選單中選擇 OpenRouter API key... 進行設定。"
+    ),
+}
+
+CHAT_NO_API_KEY_SEND_LABELS: dict[str, str] = {
+    "en": "Add your OpenRouter API key from the tray menu to chat.",
+    "zh-Hans": "请从托盘菜单设置 OpenRouter API 密钥后再聊天。",
+    "zh-Hant": "請從系統匣選單設定 OpenRouter API 金鑰後再聊天。",
+}
+
+CHAT_STATUS_ONLINE_LABELS: dict[str, str] = {
+    "en": "Online",
+    "zh-Hans": "在线",
+    "zh-Hant": "線上",
+}
+
+CHAT_STATUS_OFFLINE_LABELS: dict[str, str] = {
+    "en": "No API key",
+    "zh-Hans": "未配置密钥",
+    "zh-Hant": "未設定金鑰",
+}
+
+TRAY_NO_API_KEY_TITLE: str = "py-shimeji — chat unavailable"
+TRAY_NO_API_KEY_MESSAGE: str = (
+    "Choose OpenRouter API key... in the tray menu to chat with Bubu."
+)
+TRAY_API_KEY_SAVED_MESSAGE: str = "OpenRouter API key saved. You can chat with Bubu now."
+TRAY_API_KEY_CLEARED_MESSAGE: str = "OpenRouter API key removed. Chat is disabled."
+
 CHAT_INPUT_PLACEHOLDERS: dict[str, str] = {
     "en": "Say something to Bubu...",
     "zh-Hans": "跟 Bubu 说点什么...",
@@ -266,6 +374,15 @@ CHAT_SYSTEM_PROMPT: str = (
 PEER_INTERACTION_Y_TOLERANCE_PX: int = 16
 PEER_NUDGE_PX: int = 5
 PEER_SIT_ON_BUMP_CHANCE: float = 0.2
+
+# Cursor chase: walk toward the mouse on the same ledge, then sit when it stays still.
+CURSOR_CHASE_CHANCE: float = 0.12
+CURSOR_CHASE_MIN_MS: int = 3_000
+CURSOR_CHASE_MAX_MS: int = 10_000
+CURSOR_SIT_DISTANCE_PX: int = 28
+CURSOR_STILL_MS: int = 700
+CURSOR_STILL_TOLERANCE_PX: int = 10
+CURSOR_Y_TOLERANCE_PX: int = 56
 
 # ---------------------------------------------------------------------------
 # Fallback rendering (used when sprite files are missing)
