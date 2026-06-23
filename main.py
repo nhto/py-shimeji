@@ -7,7 +7,7 @@ import sys
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon
 
-from config import MAX_PETS, get_pet_sprites_dir, get_saved_pet_visible
+from config import MAX_PETS, get_pet_sprites_dir, get_saved_pet_visible, get_saved_pets_paused
 from display import DisplayChangeWatcher
 from pet_window import PetWindow
 from tray import SystemTray
@@ -39,6 +39,12 @@ def main() -> int:
     ]
     for index, pet in enumerate(pets):
         pet.set_peer_pets([other for other_index, other in enumerate(pets) if other_index != index])
+
+    if get_saved_pets_paused():
+        for pet in pets:
+            pet.set_motion_paused(True)
+
+    for index, pet in enumerate(pets):
         visible = get_saved_pet_visible(index)
         if visible is None:
             visible = pet.has_sprites

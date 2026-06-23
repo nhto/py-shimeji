@@ -20,15 +20,19 @@ from config import (
     TRAY_HIDE_PET_LABELS,
     TRAY_NO_API_KEY_MESSAGE_LABELS,
     TRAY_NO_API_KEY_TITLE_LABELS,
+    TRAY_PAUSE_PETS_LABELS,
+    TRAY_PAUSE_PETS_TOOLTIP_LABELS,
     TRAY_PREFERENCE_LABELS,
     TRAY_PREFERENCES_SAVED_MESSAGE_LABELS,
     TRAY_QUIT_LABELS,
     TRAY_SHOW_PET_LABELS,
     get_chat_language,
     get_pet_sprites_dir,
+    get_saved_pets_paused,
     has_openrouter_api_key,
     localized,
     set_saved_pet_visible,
+    set_saved_pets_paused,
 )
 from pet_window import PetWindow
 from sprite_picker_dialog import open_sprite_picker_dialog
@@ -100,6 +104,12 @@ class SystemTray:
 
         menu.addSeparator()
 
+        self._pause_pets_action = QAction("", menu)
+        self._pause_pets_action.setCheckable(True)
+        self._pause_pets_action.setChecked(get_saved_pets_paused())
+        self._pause_pets_action.toggled.connect(self._set_motion_paused)
+        menu.addAction(self._pause_pets_action)
+
         self._click_through_action = QAction("", menu)
         self._click_through_action.setCheckable(True)
         self._click_through_action.setChecked(False)
@@ -160,6 +170,10 @@ class SystemTray:
 
         self._chat_action.setText(localized(TRAY_CHAT_LABELS, lang))
         self._preferences_action.setText(localized(TRAY_PREFERENCE_LABELS, lang))
+        self._pause_pets_action.setText(localized(TRAY_PAUSE_PETS_LABELS, lang))
+        self._pause_pets_action.setToolTip(
+            localized(TRAY_PAUSE_PETS_TOOLTIP_LABELS, lang)
+        )
         self._click_through_action.setText(localized(TRAY_CLICK_THROUGH_LABELS, lang))
         self._click_through_action.setToolTip(
             localized(TRAY_CLICK_THROUGH_TOOLTIP_LABELS, lang)
@@ -182,6 +196,11 @@ class SystemTray:
         self._click_through_action.blockSignals(True)
         self._click_through_action.setChecked(click_through)
         self._click_through_action.blockSignals(False)
+
+        motion_paused = bool(self._pets) and all(pet.motion_paused for pet in self._pets)
+        self._pause_pets_action.blockSignals(True)
+        self._pause_pets_action.setChecked(motion_paused)
+        self._pause_pets_action.blockSignals(False)
 
         if has_openrouter_api_key():
             self._chat_action.setToolTip("")
@@ -230,6 +249,11 @@ class SystemTray:
     def _set_click_through(self, enabled: bool) -> None:
         for pet in self._pets:
             pet.set_click_through(enabled)
+
+    def _set_motion_paused(self, enabled: bool) -> None:
+        for pet in self._pets:
+            pet.set_motion_paused(enabled)
+        set_saved_pets_paused(enabled)
 
     def _open_chat(self) -> None:
         pet = self._menu_host_pet or (self._pets[0] if self._pets else None)

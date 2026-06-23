@@ -439,6 +439,21 @@ TRAY_CLICK_THROUGH_TOOLTIP_LABELS: dict[str, str] = {
     "zh-Hant": "啟用後寵物會忽略滑鼠。關閉後可拖動。",
 }
 
+TRAY_PAUSE_PETS_LABELS: dict[str, str] = {
+    "en": "Pause pets (reduce motion)",
+    "zh-Hans": "暂停宠物（减少动画）",
+    "zh-Hant": "暫停寵物（減少動畫）",
+}
+
+TRAY_PAUSE_PETS_TOOLTIP_LABELS: dict[str, str] = {
+    "en": (
+        "Pets stay still for meetings or accessibility. "
+        "Disable click-through to drag them while paused."
+    ),
+    "zh-Hans": "宠物保持静止，适合开会或无障碍使用。关闭穿透点击后可拖动它们。",
+    "zh-Hant": "寵物保持靜止，適合開會或無障礙使用。關閉穿透點擊後可拖動牠們。",
+}
+
 TRAY_QUIT_LABELS: dict[str, str] = {
     "en": "Quit",
     "zh-Hans": "退出",
@@ -872,6 +887,18 @@ def set_saved_pet_visible(pet_index: int, visible: bool) -> None:
         entry = {}
         pets[str(pet_index)] = entry
     entry["visible"] = visible
+    _save_app_settings(data)
+
+
+def get_saved_pets_paused() -> bool:
+    """Return whether pets should start in reduce-motion pause mode."""
+    return bool(_load_app_settings().get("pets_paused", False))
+
+
+def set_saved_pets_paused(paused: bool) -> None:
+    """Persist reduce-motion pause mode for the next launch."""
+    data = _load_app_settings()
+    data["pets_paused"] = paused
     _save_app_settings(data)
 
 

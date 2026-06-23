@@ -107,7 +107,7 @@ You can also change a pet's sprites at runtime from the **system tray** menu: **
 - **Right-click** — open the tray menu at the pet
 - **Release on floor** — return to walking / idle
 - **Release in mid-air** — FALLING until the nearest ledge or floor
-- **System tray** — show/hide each pet, chat with Bubu, manage your OpenRouter API key, toggle click-through, change sprite folders, or quit
+- **System tray** — show/hide each pet, chat with Bubu, manage your OpenRouter API key, pause pets (reduce motion), toggle click-through, change sprite folders, or quit
 
 ## Multiple pets
 
@@ -139,3 +139,9 @@ If no API key is configured:
 ## Click-through
 
 Enable **Click-through (pass mouse clicks)** from the system tray when you want pets visible but not in the way — mouse clicks pass through to apps below. Turn it off again before dragging a pet.
+
+## Pause pets (reduce motion)
+
+Enable **Pause pets (reduce motion)** from the system tray when you want pets visible but still — useful for meetings, screen sharing, or accessibility. Pets snap to the nearest ledge or floor, stop walking and animating, and stay in a sit pose. The setting is remembered across restarts.
+
+You can still drag pets while paused if click-through is off. Turn pause off to resume normal behavior.
