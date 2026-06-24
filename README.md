@@ -9,6 +9,7 @@ The pet lives in a frameless, transparent, always-on-top window. It idles, walks
 - Python 3.10 or newer
 - PyQt6
 - An OpenRouter API key (optional — only needed for chat)
+- **Outlook integration (optional, Windows only):** classic Outlook desktop signed in to your account (see [Outlook COM feasibility](#outlook-com-feasibility-windows-only))
 
 ## Setup
 
@@ -41,6 +42,55 @@ OPENROUTER_API_KEY=sk-or-v1-...
 ```
 
 Keys saved from the tray menu are written to `.env` and take effect immediately — no restart needed.
+
+### Outlook integration
+
+| Mode | When to use |
+|------|-------------|
+| **Classic Outlook (COM)** | **Recommended** if your org blocks Graph (most work/school accounts) |
+| **Microsoft 365 / New Outlook (Graph)** | Only if you can register an Azure app **and** IT grants consent |
+
+#### No Microsoft Graph access?
+
+Many universities and companies **do not allow** personal/third-party apps to use Graph on work mailboxes. **New Outlook has no other API** — py-shimeji cannot read it without Graph.
+
+**Your workable option: switch to Classic Outlook + COM** (this already worked on your PC in Phase 0):
+
+1. **Turn off New Outlook** — in the New Outlook window, use the toggle at the top-right (*Try new Outlook* → switch off), **or** open **Outlook (classic)** from the Windows Start menu (not the “New” icon).
+2. Sign in to your work account in classic Outlook and wait for sync.
+3. In py-shimeji: tray → **Outlook** → **Outlook settings...** → **Classic Outlook desktop (COM)** → Save.
+4. Tray → **Outlook** → **Connect**.
+
+Verify with:
+
+```powershell
+.venv\Scripts\python scripts\test_outlook_com.py
+```
+
+You do **not** need `AZURE_CLIENT_ID` for this path.
+
+#### New Outlook / Graph (optional — needs IT)
+
+Only use this if your organization allows it:
+
+1. Register a **public client / native** app in [Azure Portal](https://portal.azure.com/) → Microsoft Entra ID → App registrations.
+2. Redirect URI: `http://localhost`
+3. API permissions: `User.Read`, `Mail.Read`, `Calendars.Read` (+ **admin consent** for work accounts)
+4. Add to `.env`:
+
+```env
+AZURE_CLIENT_ID=your-application-client-id
+AZURE_TENANT_ID=organizations
+```
+
+5. Tray → **Outlook** → settings → **Microsoft 365 / New Outlook (Graph API)** → **Connect** → browser sign-in.
+
+#### Classic Outlook (COM) reference
+
+```powershell
+.venv\Scripts\python scripts\test_outlook_com.py
+.venv\Scripts\python scripts\demo_outlook_com_client.py
+```
 
 ## Run
 
@@ -121,10 +171,20 @@ py-shimeji/
 ├── behavior_settings_dialog.py  # Speed, chase, pet count, ambient speech
 ├── dialog_theme.py  # Shared styling for dialogs and chat
 ├── sprite_picker_dialog.py  # Visual sprite pack picker
+├── outlook_models.py        # MailItem / CalendarEvent dataclasses
+├── outlook_com_client.py    # Classic Outlook COM client (Windows)
+├── outlook_com_constants.py # MAPI folder/property constants
+├── outlook_graph_auth.py    # MSAL sign-in for Graph API
+├── outlook_graph_client.py  # Microsoft Graph mail/calendar client
+├── outlook_backend.py       # COM vs Graph backend factory
+├── outlook_status.py        # Tray connection state + unread polling
+├── outlook_settings_dialog.py  # Outlook connect status and toggles
 ├── py-shimeji.spec  # PyInstaller build spec
 ├── scripts/
-│   ├── build.sh     # One-command build (Git Bash / Unix)
-│   └── build.ps1    # One-command build (PowerShell)
+│   ├── build.sh               # One-command build (Git Bash / Unix)
+│   ├── build.ps1              # One-command build (PowerShell)
+│   ├── test_outlook_com.py    # Phase 0: Outlook COM feasibility check (Windows)
+│   └── demo_outlook_com_client.py  # Phase 1: inbox/calendar COM client demo
 ├── assets/
 │   └── sprites/
 │       ├── pet_1/   # PNG set for pet 1

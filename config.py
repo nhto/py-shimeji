@@ -573,6 +573,234 @@ TRAY_QUIT_LABELS: dict[str, str] = {
     "zh-Hant": "退出",
 }
 
+TRAY_OUTLOOK_MENU_LABELS: dict[str, str] = {
+    "en": "Outlook",
+    "zh-Hans": "Outlook",
+    "zh-Hant": "Outlook",
+}
+
+TRAY_OUTLOOK_CONNECT_LABELS: dict[str, str] = {
+    "en": "Connect",
+    "zh-Hans": "连接",
+    "zh-Hant": "連接",
+}
+
+TRAY_OUTLOOK_DISCONNECT_LABELS: dict[str, str] = {
+    "en": "Disconnect",
+    "zh-Hans": "断开",
+    "zh-Hant": "斷開",
+}
+
+TRAY_OUTLOOK_SETTINGS_LABELS: dict[str, str] = {
+    "en": "Outlook settings...",
+    "zh-Hans": "Outlook 设置...",
+    "zh-Hant": "Outlook 設定...",
+}
+
+TRAY_OUTLOOK_CONNECTED_MESSAGE_LABELS: dict[str, str] = {
+    "en": "Connected to Outlook as {email}.",
+    "zh-Hans": "已连接 Outlook：{email}",
+    "zh-Hant": "已連接 Outlook：{email}",
+}
+
+TRAY_OUTLOOK_CONNECT_FAILED_TITLE_LABELS: dict[str, str] = {
+    "en": "Outlook connection failed",
+    "zh-Hans": "Outlook 连接失败",
+    "zh-Hant": "Outlook 連線失敗",
+}
+
+TRAY_OUTLOOK_CONNECT_FAILED_MESSAGE_LABELS: dict[str, str] = {
+    "en": (
+        "Could not connect. For New Outlook, set AZURE_CLIENT_ID in .env and sign in when prompted. "
+        "For classic Outlook, turn off the New Outlook toggle and try again."
+    ),
+    "zh-Hans": (
+        "连接失败。新版 Outlook 请在 .env 设置 AZURE_CLIENT_ID 并按提示登录。"
+        "经典 Outlook 请关闭“新版 Outlook”开关后重试。"
+    ),
+    "zh-Hant": (
+        "連線失敗。新版 Outlook 請在 .env 設定 AZURE_CLIENT_ID 並依提示登入。"
+        "傳統 Outlook 請關閉「新版 Outlook」開關後重試。"
+    ),
+}
+
+TRAY_OUTLOOK_DISCONNECTED_MESSAGE_LABELS: dict[str, str] = {
+    "en": "Outlook disconnected.",
+    "zh-Hans": "已断开 Outlook。",
+    "zh-Hant": "已斷開 Outlook。",
+}
+
+TRAY_OUTLOOK_SETTINGS_SAVED_MESSAGE_LABELS: dict[str, str] = {
+    "en": "Outlook settings saved.",
+    "zh-Hans": "Outlook 设置已保存。",
+    "zh-Hant": "Outlook 設定已儲存。",
+}
+
+TRAY_TOOLTIP_OUTLOOK_UNREAD_LABELS: dict[str, str] = {
+    "en": "py-shimeji · Outlook: {count} unread",
+    "zh-Hans": "py-shimeji · Outlook：{count} 封未读",
+    "zh-Hant": "py-shimeji · Outlook：{count} 封未讀",
+}
+
+OUTLOOK_DIALOG_TITLE_LABELS: dict[str, str] = {
+    "en": "Outlook settings",
+    "zh-Hans": "Outlook 设置",
+    "zh-Hant": "Outlook 設定",
+}
+
+OUTLOOK_DIALOG_INTRO_LABELS: dict[str, str] = {
+    "en": (
+        "Choose how py-shimeji reads your mailbox. "
+        "New Outlook requires Microsoft 365 (Graph API). "
+        "Classic Outlook desktop can use COM instead."
+    ),
+    "zh-Hans": (
+        "选择 py-shimeji 读取邮箱的方式。"
+        "新版 Outlook 需使用 Microsoft 365（Graph API）。"
+        "经典 Outlook 桌面版可使用 COM。"
+    ),
+    "zh-Hant": (
+        "選擇 py-shimeji 讀取信箱的方式。"
+        "新版 Outlook 需使用 Microsoft 365（Graph API）。"
+        "傳統 Outlook 桌面版可使用 COM。"
+    ),
+}
+
+OUTLOOK_DIALOG_SOURCE_LABELS: dict[str, str] = {
+    "en": "Connection type",
+    "zh-Hans": "连接方式",
+    "zh-Hant": "連線方式",
+}
+
+OUTLOOK_DIALOG_SOURCE_GRAPH_LABELS: dict[str, str] = {
+    "en": "Microsoft 365 / New Outlook (Graph API)",
+    "zh-Hans": "Microsoft 365 / 新版 Outlook（Graph API）",
+    "zh-Hant": "Microsoft 365 / 新版 Outlook（Graph API）",
+}
+
+OUTLOOK_DIALOG_SOURCE_COM_LABELS: dict[str, str] = {
+    "en": "Classic Outlook desktop (COM)",
+    "zh-Hans": "经典 Outlook 桌面版（COM）",
+    "zh-Hant": "傳統 Outlook 桌面版（COM）",
+}
+
+OUTLOOK_DIALOG_SOURCE_GRAPH_HINT_LABELS: dict[str, str] = {
+    "en": "Works with New Outlook. Requires AZURE_CLIENT_ID in .env (one-time browser sign-in).",
+    "zh-Hans": "适用于新版 Outlook。需在 .env 中配置 AZURE_CLIENT_ID（浏览器登录一次）。",
+    "zh-Hant": "適用於新版 Outlook。需在 .env 中設定 AZURE_CLIENT_ID（瀏覽器登入一次）。",
+}
+
+OUTLOOK_DIALOG_SOURCE_COM_HINT_LABELS: dict[str, str] = {
+    "en": "Windows only. Requires classic OUTLOOK.EXE — turn off the New Outlook toggle.",
+    "zh-Hans": "仅 Windows。需经典 OUTLOOK.EXE — 请关闭“新版 Outlook”开关。",
+    "zh-Hant": "僅 Windows。需傳統 OUTLOOK.EXE — 請關閉「新版 Outlook」開關。",
+}
+
+OUTLOOK_DIALOG_STATUS_NEEDS_CONFIG_LABELS: dict[str, str] = {
+    "en": "Add AZURE_CLIENT_ID to .env to use New Outlook",
+    "zh-Hans": "请在 .env 中添加 AZURE_CLIENT_ID 以使用新版 Outlook",
+    "zh-Hant": "請在 .env 中新增 AZURE_CLIENT_ID 以使用新版 Outlook",
+}
+
+OUTLOOK_DIALOG_GRAPH_IT_BLOCKED_LABELS: dict[str, str] = {
+    "en": (
+        "Your organization may block Microsoft Graph for third-party apps. "
+        "Use Classic Outlook (COM) instead, or ask IT to approve a Graph app."
+    ),
+    "zh-Hans": (
+        "你的组织可能禁止第三方应用使用 Microsoft Graph。"
+        "请改用经典 Outlook（COM），或联系 IT 审批 Graph 应用。"
+    ),
+    "zh-Hant": (
+        "你的組織可能禁止第三方應用程式使用 Microsoft Graph。"
+        "請改用傳統 Outlook（COM），或聯絡 IT 審批 Graph 應用。"
+    ),
+}
+
+OUTLOOK_DIALOG_STATUS_CONNECTED_LABELS: dict[str, str] = {
+    "en": "Connected as {email}",
+    "zh-Hans": "已连接：{email}",
+    "zh-Hant": "已連接：{email}",
+}
+
+OUTLOOK_DIALOG_STATUS_DISCONNECTED_LABELS: dict[str, str] = {
+    "en": "Not connected",
+    "zh-Hans": "未连接",
+    "zh-Hant": "未連接",
+}
+
+OUTLOOK_DIALOG_STATUS_UNAVAILABLE_LABELS: dict[str, str] = {
+    "en": "Outlook not running",
+    "zh-Hans": "Outlook 未运行",
+    "zh-Hant": "Outlook 未執行",
+}
+
+OUTLOOK_DIALOG_STATUS_BLOCKED_LABELS: dict[str, str] = {
+    "en": "COM blocked or unavailable",
+    "zh-Hans": "COM 被阻止或不可用",
+    "zh-Hant": "COM 被阻擋或不可用",
+}
+
+OUTLOOK_DIALOG_STATUS_UNSUPPORTED_LABELS: dict[str, str] = {
+    "en": "Outlook COM is Windows-only",
+    "zh-Hans": "Outlook COM 仅支持 Windows",
+    "zh-Hant": "Outlook COM 僅支援 Windows",
+}
+
+OUTLOOK_DIALOG_TEST_LABELS: dict[str, str] = {
+    "en": "Test connection",
+    "zh-Hans": "测试连接",
+    "zh-Hant": "測試連線",
+}
+
+OUTLOOK_DIALOG_MAIL_LABELS: dict[str, str] = {
+    "en": "Mail notifications",
+    "zh-Hans": "邮件通知",
+    "zh-Hant": "郵件通知",
+}
+
+OUTLOOK_DIALOG_CALENDAR_LABELS: dict[str, str] = {
+    "en": "Calendar reminders",
+    "zh-Hans": "日历提醒",
+    "zh-Hant": "行事曆提醒",
+}
+
+OUTLOOK_DIALOG_MAIL_HINT_LABELS: dict[str, str] = {
+    "en": "When enabled, new unread mail can trigger pet alerts in a later phase.",
+    "zh-Hans": "启用后，未读邮件可在后续阶段触发宠物提醒。",
+    "zh-Hant": "啟用後，未讀郵件可在後續階段觸發寵物提醒。",
+}
+
+OUTLOOK_DIALOG_CALENDAR_HINT_LABELS: dict[str, str] = {
+    "en": "When enabled, upcoming meetings can trigger pet reminders in a later phase.",
+    "zh-Hans": "启用后，即将到来的会议可在后续阶段触发宠物提醒。",
+    "zh-Hant": "啟用後，即將到來的會議可在後續階段觸發寵物提醒。",
+}
+
+OUTLOOK_DIALOG_SAVE_LABELS: dict[str, str] = {
+    "en": "Save",
+    "zh-Hans": "保存",
+    "zh-Hant": "儲存",
+}
+
+OUTLOOK_DIALOG_CANCEL_LABELS: dict[str, str] = {
+    "en": "Cancel",
+    "zh-Hans": "取消",
+    "zh-Hant": "取消",
+}
+
+OUTLOOK_DIALOG_TEST_OK_LABELS: dict[str, str] = {
+    "en": "Connection OK — {email}",
+    "zh-Hans": "连接成功 — {email}",
+    "zh-Hant": "連線成功 — {email}",
+}
+
+OUTLOOK_DIALOG_TEST_FAIL_LABELS: dict[str, str] = {
+    "en": "Connection failed — open classic Outlook and try again.",
+    "zh-Hans": "连接失败 — 请打开经典 Outlook 后重试。",
+    "zh-Hant": "連線失敗 — 請開啟傳統 Outlook 後重試。",
+}
+
 PREFERENCES_TITLE_LABELS: dict[str, str] = {
     "en": "Preferences",
     "zh-Hans": "偏好设置",
@@ -1129,6 +1357,277 @@ def set_behavior_settings(
         "ambient_speech_enabled": bool(ambient_speech_enabled),
     }
     _save_app_settings(data)
+
+
+# ---------------------------------------------------------------------------
+# Outlook settings (.app_settings.json → outlook)
+# ---------------------------------------------------------------------------
+
+OUTLOOK_SOURCE_GRAPH: str = "graph"
+OUTLOOK_SOURCE_COM: str = "com"
+OUTLOOK_MAIL_POLL_INTERVAL_SEC_DEFAULT: int = 45
+OUTLOOK_CALENDAR_POLL_INTERVAL_SEC_DEFAULT: int = 60
+OUTLOOK_MEETING_REMINDER_MINUTES_DEFAULT: list[int] = [15, 5]
+OUTLOOK_MAIL_POLL_INTERVAL_SEC_MIN: int = 15
+OUTLOOK_MAIL_POLL_INTERVAL_SEC_MAX: int = 3600
+
+
+def outlook_com_supported() -> bool:
+    """True when this platform can use classic Outlook COM."""
+    return sys.platform == "win32"
+
+
+def get_azure_client_id() -> str:
+    return os.environ.get("AZURE_CLIENT_ID", "").strip()
+
+
+def get_azure_tenant_id() -> str:
+    tenant = os.environ.get("AZURE_TENANT_ID", "organizations").strip()
+    return tenant or "organizations"
+
+
+def outlook_graph_configured() -> bool:
+    return bool(get_azure_client_id())
+
+
+def outlook_integration_available() -> bool:
+    """True when at least one Outlook backend can be used."""
+    return outlook_graph_configured() or outlook_com_supported()
+
+
+def is_new_outlook_preferred() -> bool:
+    """Best-effort detection of New Outlook as the active mail client."""
+    if sys.platform != "win32":
+        return True
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Office\16.0\Outlook\Preferences",
+        ) as key:
+            value, _ = winreg.QueryValueEx(key, "UseNewOutlook")
+            return int(value) != 0
+    except OSError:
+        pass
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "Get-AppxPackage -Name Microsoft.OutlookForWindows | Select-Object -First 1",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        return "Microsoft.OutlookForWindows" in result.stdout
+    except Exception:
+        return False
+
+
+def get_default_outlook_source() -> str:
+    """Prefer COM when Graph is not configured (typical for locked-down work accounts)."""
+    if outlook_graph_configured() and is_new_outlook_preferred():
+        return OUTLOOK_SOURCE_GRAPH
+    if outlook_com_supported():
+        return OUTLOOK_SOURCE_COM
+    return OUTLOOK_SOURCE_GRAPH
+
+
+def get_outlook_source() -> str:
+    raw = _outlook_settings_raw().get("source")
+    if isinstance(raw, str) and raw.strip().lower() in {OUTLOOK_SOURCE_GRAPH, OUTLOOK_SOURCE_COM}:
+        return raw.strip().lower()
+    return get_default_outlook_source()
+
+
+def get_outlook_graph_token_cache() -> str:
+    cached = _outlook_settings_raw().get("graph_token_cache")
+    return cached if isinstance(cached, str) else ""
+
+
+def set_outlook_graph_token_cache(cache: str) -> None:
+    _save_outlook_partial({"graph_token_cache": cache})
+
+
+def _outlook_enabled_from_env() -> bool:
+    value = os.environ.get("OUTLOOK_COM_ENABLED", "").strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    value = os.environ.get("OUTLOOK_ENABLED", "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def _outlook_settings_raw() -> dict:
+    outlook = _load_app_settings().get("outlook", {})
+    return outlook if isinstance(outlook, dict) else {}
+
+
+def _normalize_reminder_minutes(value: object) -> list[int]:
+    if not isinstance(value, list):
+        return list(OUTLOOK_MEETING_REMINDER_MINUTES_DEFAULT)
+    minutes: list[int] = []
+    for item in value:
+        try:
+            minute = int(item)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            continue
+        if minute > 0:
+            minutes.append(minute)
+    if not minutes:
+        return list(OUTLOOK_MEETING_REMINDER_MINUTES_DEFAULT)
+    return sorted(set(minutes), reverse=True)
+
+
+def _normalize_string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    result: list[str] = []
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            result.append(item.strip())
+    return result
+
+
+def get_outlook_settings() -> dict:
+    """Return normalized Outlook settings with defaults applied."""
+    raw = _outlook_settings_raw()
+    enabled_default = _outlook_enabled_from_env()
+    return {
+        "enabled": bool(raw.get("enabled", enabled_default)),
+        "source": get_outlook_source(),
+        "mail_enabled": bool(raw.get("mail_enabled", True)),
+        "calendar_enabled": bool(raw.get("calendar_enabled", True)),
+        "mail_poll_interval_sec": _clamp_int(
+            raw.get("mail_poll_interval_sec"),
+            OUTLOOK_MAIL_POLL_INTERVAL_SEC_MIN,
+            OUTLOOK_MAIL_POLL_INTERVAL_SEC_MAX,
+            OUTLOOK_MAIL_POLL_INTERVAL_SEC_DEFAULT,
+        ),
+        "calendar_poll_interval_sec": _clamp_int(
+            raw.get("calendar_poll_interval_sec"),
+            OUTLOOK_MAIL_POLL_INTERVAL_SEC_MIN,
+            OUTLOOK_MAIL_POLL_INTERVAL_SEC_MAX,
+            OUTLOOK_CALENDAR_POLL_INTERVAL_SEC_DEFAULT,
+        ),
+        "meeting_reminder_minutes": _normalize_reminder_minutes(
+            raw.get("meeting_reminder_minutes")
+        ),
+        "seen_mail_entry_ids": _normalize_string_list(raw.get("seen_mail_entry_ids")),
+        "reminded_events": raw.get("reminded_events")
+        if isinstance(raw.get("reminded_events"), dict)
+        else {},
+    }
+
+
+def get_outlook_enabled() -> bool:
+    return bool(get_outlook_settings()["enabled"])
+
+
+def get_outlook_mail_enabled() -> bool:
+    return bool(get_outlook_settings()["mail_enabled"])
+
+
+def get_outlook_calendar_enabled() -> bool:
+    return bool(get_outlook_settings()["calendar_enabled"])
+
+
+def get_outlook_mail_poll_interval_sec() -> int:
+    return int(get_outlook_settings()["mail_poll_interval_sec"])
+
+
+def get_outlook_calendar_poll_interval_sec() -> int:
+    return int(get_outlook_settings()["calendar_poll_interval_sec"])
+
+
+def get_outlook_meeting_reminder_minutes() -> list[int]:
+    return list(get_outlook_settings()["meeting_reminder_minutes"])
+
+
+def get_outlook_seen_mail_entry_ids() -> list[str]:
+    return list(get_outlook_settings()["seen_mail_entry_ids"])
+
+
+def get_outlook_reminded_events() -> dict:
+    reminded = get_outlook_settings()["reminded_events"]
+    return dict(reminded) if isinstance(reminded, dict) else {}
+
+
+def _save_outlook_partial(updates: dict) -> None:
+    data = _load_app_settings()
+    outlook = data.setdefault("outlook", {})
+    if not isinstance(outlook, dict):
+        outlook = {}
+        data["outlook"] = outlook
+    outlook.update(updates)
+    _save_app_settings(data)
+
+
+def set_outlook_enabled(enabled: bool) -> None:
+    _save_outlook_partial({"enabled": bool(enabled)})
+
+
+def set_outlook_mail_enabled(enabled: bool) -> None:
+    _save_outlook_partial({"mail_enabled": bool(enabled)})
+
+
+def set_outlook_calendar_enabled(enabled: bool) -> None:
+    _save_outlook_partial({"calendar_enabled": bool(enabled)})
+
+
+def set_outlook_settings(
+    *,
+    source: str | None = None,
+    mail_enabled: bool | None = None,
+    calendar_enabled: bool | None = None,
+    mail_poll_interval_sec: int | None = None,
+    calendar_poll_interval_sec: int | None = None,
+    meeting_reminder_minutes: list[int] | None = None,
+) -> None:
+    """Persist user-facing Outlook settings from the settings dialog."""
+    updates: dict[str, object] = {}
+    if source is not None:
+        normalized = source.strip().lower()
+        if normalized in {OUTLOOK_SOURCE_GRAPH, OUTLOOK_SOURCE_COM}:
+            updates["source"] = normalized
+    if mail_enabled is not None:
+        updates["mail_enabled"] = bool(mail_enabled)
+    if calendar_enabled is not None:
+        updates["calendar_enabled"] = bool(calendar_enabled)
+    if mail_poll_interval_sec is not None:
+        updates["mail_poll_interval_sec"] = _clamp_int(
+            mail_poll_interval_sec,
+            OUTLOOK_MAIL_POLL_INTERVAL_SEC_MIN,
+            OUTLOOK_MAIL_POLL_INTERVAL_SEC_MAX,
+            OUTLOOK_MAIL_POLL_INTERVAL_SEC_DEFAULT,
+        )
+    if calendar_poll_interval_sec is not None:
+        updates["calendar_poll_interval_sec"] = _clamp_int(
+            calendar_poll_interval_sec,
+            OUTLOOK_MAIL_POLL_INTERVAL_SEC_MIN,
+            OUTLOOK_MAIL_POLL_INTERVAL_SEC_MAX,
+            OUTLOOK_CALENDAR_POLL_INTERVAL_SEC_DEFAULT,
+        )
+    if meeting_reminder_minutes is not None:
+        updates["meeting_reminder_minutes"] = _normalize_reminder_minutes(
+            meeting_reminder_minutes
+        )
+    if updates:
+        _save_outlook_partial(updates)
+
+
+def set_outlook_seen_mail_entry_ids(entry_ids: list[str]) -> None:
+    _save_outlook_partial({"seen_mail_entry_ids": _normalize_string_list(entry_ids)})
+
+
+def set_outlook_reminded_events(reminded_events: dict) -> None:
+    payload = reminded_events if isinstance(reminded_events, dict) else {}
+    _save_outlook_partial({"reminded_events": payload})
 
 
 AMBIENT_SPEECH_PHRASES: dict[str, list[str]] = {

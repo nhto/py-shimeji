@@ -27,26 +27,39 @@ from config import (
     TRAY_HIDE_PET_LABELS,
     TRAY_NO_API_KEY_MESSAGE_LABELS,
     TRAY_NO_API_KEY_TITLE_LABELS,
+    TRAY_OUTLOOK_CONNECT_FAILED_MESSAGE_LABELS,
+    TRAY_OUTLOOK_CONNECT_FAILED_TITLE_LABELS,
+    TRAY_OUTLOOK_CONNECT_LABELS,
+    TRAY_OUTLOOK_CONNECTED_MESSAGE_LABELS,
+    TRAY_OUTLOOK_DISCONNECTED_MESSAGE_LABELS,
+    TRAY_OUTLOOK_DISCONNECT_LABELS,
+    TRAY_OUTLOOK_MENU_LABELS,
+    TRAY_OUTLOOK_SETTINGS_LABELS,
+    TRAY_OUTLOOK_SETTINGS_SAVED_MESSAGE_LABELS,
     TRAY_PAUSE_PETS_LABELS,
     TRAY_PAUSE_PETS_TOOLTIP_LABELS,
     TRAY_PREFERENCE_LABELS,
     TRAY_PREFERENCES_SAVED_MESSAGE_LABELS,
     TRAY_QUIT_LABELS,
     TRAY_SHOW_PET_LABELS,
+    TRAY_TOOLTIP_OUTLOOK_UNREAD_LABELS,
     get_chat_language,
     get_pet_sprites_dir,
     get_saved_pet_visible,
     get_saved_pets_paused,
     has_openrouter_api_key,
     localized,
+    outlook_integration_available,
     set_saved_pet_visible,
     set_saved_pets_paused,
 )
+from outlook_settings_dialog import open_outlook_settings_dialog
 from pet_window import PetWindow
 from sprite_picker_dialog import open_sprite_picker_dialog
 
 if TYPE_CHECKING:
     from display import DisplayChangeWatcher
+    from outlook_status import OutlookStatusManager
 
 
 def _build_tray_icon() -> QIcon:
@@ -82,19 +95,25 @@ class SystemTray:
         *,
         exclude_hwnds: set[int] | None = None,
         display_watcher: DisplayChangeWatcher | None = None,
+        outlook_status: OutlookStatusManager | None = None,
     ) -> None:
         self._app = app
         self._pets = pets
         self._exclude_hwnds = exclude_hwnds if exclude_hwnds is not None else set()
         self._display_watcher = display_watcher
+        self._outlook_status = outlook_status
         self._tray = QSystemTrayIcon(_build_tray_icon(), parent=pets[0] if pets else None)
-        self._tray.setToolTip("py-shimeji")
+        self._update_tray_tooltip()
 
         self._visibility_actions: dict[int, QAction] = {}
         self._change_sprites_actions: dict[int, QAction] = {}
         self._chat_action: QAction | None = None
         self._preferences_action: QAction | None = None
         self._behavior_action: QAction | None = None
+        self._outlook_menu: QMenu | None = None
+        self._outlook_connect_action: QAction | None = None
+        self._outlook_disconnect_action: QAction | None = None
+        self._outlook_settings_action: QAction | None = None
         self._pause_pets_action: QAction | None = None
         self._click_through_action: QAction | None = None
         self._quit_action: QAction | None = None
@@ -106,6 +125,9 @@ class SystemTray:
         self._tray.show()
 
         self._apply_menu_language()
+        if self._outlook_status is not None:
+            self._outlook_status.status_changed.connect(self._on_outlook_status_changed)
+            self._outlook_status.unread_count_changed.connect(self._on_outlook_unread_changed)
 
         if not has_openrouter_api_key():
             language = get_chat_language()
@@ -153,6 +175,16 @@ class SystemTray:
         self._behavior_action = QAction("", menu)
         self._behavior_action.triggered.connect(self._open_behavior_settings)
         menu.addAction(self._behavior_action)
+
+        if outlook_integration_available() and self._outlook_status is not None:
+            menu.addSeparator()
+            self._outlook_menu = menu.addMenu("")
+            self._outlook_connect_action = self._outlook_menu.addAction("")
+            self._outlook_connect_action.triggered.connect(self._connect_outlook)
+            self._outlook_disconnect_action = self._outlook_menu.addAction("")
+            self._outlook_disconnect_action.triggered.connect(self._disconnect_outlook)
+            self._outlook_settings_action = self._outlook_menu.addAction("")
+            self._outlook_settings_action.triggered.connect(self._open_outlook_settings)
 
         menu.addSeparator()
 
@@ -219,6 +251,18 @@ class SystemTray:
             self._preferences_action.setText(localized(TRAY_PREFERENCE_LABELS, lang))
         if self._behavior_action is not None:
             self._behavior_action.setText(localized(TRAY_BEHAVIOR_LABELS, lang))
+        if self._outlook_menu is not None:
+            self._outlook_menu.setTitle(localized(TRAY_OUTLOOK_MENU_LABELS, lang))
+        if self._outlook_connect_action is not None:
+            self._outlook_connect_action.setText(localized(TRAY_OUTLOOK_CONNECT_LABELS, lang))
+        if self._outlook_disconnect_action is not None:
+            self._outlook_disconnect_action.setText(
+                localized(TRAY_OUTLOOK_DISCONNECT_LABELS, lang)
+            )
+        if self._outlook_settings_action is not None:
+            self._outlook_settings_action.setText(
+                localized(TRAY_OUTLOOK_SETTINGS_LABELS, lang)
+            )
         if self._pause_pets_action is not None:
             self._pause_pets_action.setText(localized(TRAY_PAUSE_PETS_LABELS, lang))
             self._pause_pets_action.setToolTip(
@@ -263,6 +307,35 @@ class SystemTray:
                 self._chat_action.setToolTip(
                     localized(TRAY_NO_API_KEY_MESSAGE_LABELS, language)
                 )
+
+        self._refresh_outlook_menu_state()
+
+    def _refresh_outlook_menu_state(self) -> None:
+        if self._outlook_status is None:
+            return
+        connected = self._outlook_status.is_connected
+        if self._outlook_connect_action is not None:
+            self._outlook_connect_action.setVisible(not connected)
+        if self._outlook_disconnect_action is not None:
+            self._outlook_disconnect_action.setVisible(connected)
+
+    def _update_tray_tooltip(self, language: str | None = None) -> None:
+        lang = language or get_chat_language()
+        if self._outlook_status is not None and self._outlook_status.is_connected:
+            self._tray.setToolTip(
+                localized(TRAY_TOOLTIP_OUTLOOK_UNREAD_LABELS, lang).format(
+                    count=self._outlook_status.unread_count
+                )
+            )
+        else:
+            self._tray.setToolTip("py-shimeji")
+
+    def _on_outlook_status_changed(self) -> None:
+        self._refresh_outlook_menu_state()
+        self._update_tray_tooltip()
+
+    def _on_outlook_unread_changed(self, _count: int) -> None:
+        self._update_tray_tooltip()
 
     @staticmethod
     def _make_visibility_toggle(pet: PetWindow, action: QAction, index: int):
@@ -415,6 +488,65 @@ class SystemTray:
                 5_000,
             )
 
+    def _connect_outlook(self) -> None:
+        if self._outlook_status is None:
+            return
+        language = get_chat_language()
+        if self._outlook_status.connect_outlook():
+            email = self._outlook_status.email or "(unknown)"
+            self._refresh_menu_state()
+            self._tray.showMessage(
+                "py-shimeji",
+                localized(TRAY_OUTLOOK_CONNECTED_MESSAGE_LABELS, language).format(
+                    email=email
+                ),
+                QSystemTrayIcon.MessageIcon.Information,
+                5_000,
+            )
+            return
+
+        self._refresh_menu_state()
+        self._tray.showMessage(
+            localized(TRAY_OUTLOOK_CONNECT_FAILED_TITLE_LABELS, language),
+            localized(TRAY_OUTLOOK_CONNECT_FAILED_MESSAGE_LABELS, language),
+            QSystemTrayIcon.MessageIcon.Warning,
+            8_000,
+        )
+
+    def _disconnect_outlook(self) -> None:
+        if self._outlook_status is None:
+            return
+        self._outlook_status.disconnect_outlook()
+        language = get_chat_language()
+        self._refresh_menu_state()
+        self._tray.showMessage(
+            "py-shimeji",
+            localized(TRAY_OUTLOOK_DISCONNECTED_MESSAGE_LABELS, language),
+            QSystemTrayIcon.MessageIcon.Information,
+            5_000,
+        )
+
+    def _open_outlook_settings(self) -> None:
+        parent = self._pets[0] if self._pets else None
+        pet = self._menu_host_pet or (self._pets[0] if self._pets else None)
+        dialog = open_outlook_settings_dialog(
+            parent,
+            pet=pet,
+            outlook_status=self._outlook_status,
+        )
+        if dialog is None:
+            return
+        language = get_chat_language()
+        self._refresh_menu_state()
+        self._tray.showMessage(
+            "py-shimeji",
+            localized(TRAY_OUTLOOK_SETTINGS_SAVED_MESSAGE_LABELS, language),
+            QSystemTrayIcon.MessageIcon.Information,
+            5_000,
+        )
+
     def _quit(self) -> None:
+        if self._outlook_status is not None:
+            self._outlook_status.shutdown()
         self._tray.hide()
         self._app.quit()
