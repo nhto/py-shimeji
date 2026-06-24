@@ -7,7 +7,14 @@ import sys
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon
 
-from config import get_pet_sprites_dir, get_saved_pet_visible, get_saved_pets_paused, get_saved_pet_count
+from config import (
+    get_outlook_enabled,
+    get_pet_sprites_dir,
+    get_saved_pet_visible,
+    get_saved_pets_paused,
+    get_saved_pet_count,
+    outlook_integration_available,
+)
 from display import DisplayChangeWatcher
 from pet_window import PetWindow
 from tray import SystemTray
@@ -54,6 +61,12 @@ def main() -> int:
 
     display_watcher = DisplayChangeWatcher(pets, parent=pets[0] if pets else None)
 
+    outlook_status = None
+    if outlook_integration_available():
+        from outlook_status import OutlookStatusManager
+
+        outlook_status = OutlookStatusManager(parent=pets[0] if pets else None)
+
     if QSystemTrayIcon.isSystemTrayAvailable():
         app.setQuitOnLastWindowClosed(False)
         tray = SystemTray(
@@ -61,9 +74,12 @@ def main() -> int:
             pets,
             exclude_hwnds=exclude_hwnds,
             display_watcher=display_watcher,
+            outlook_status=outlook_status,
         )
         for pet in pets:
             pet.set_context_menu_handler(tray.show_context_menu)
+        if outlook_status is not None and get_outlook_enabled():
+            outlook_status.try_restore_connection()
     elif not any(pet.isVisible() for pet in pets):
         return 0
 
