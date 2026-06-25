@@ -18,6 +18,7 @@ from outlook_com_constants import (
     PR_SMTP_ADDRESS,
 )
 from outlook_models import CalendarEvent, MailItem, MailStore
+from outlook_text import extract_teams_join_url, plain_text_first_line
 
 try:
     from config import (
@@ -33,6 +34,7 @@ except ImportError:  # pragma: no cover - script import edge case
 
 _OUTLOOK_START_TIMEOUT_SEC = 45
 _CALENDAR_SCAN_LIMIT = 500
+_OL_IMPORTANCE_HIGH = 2
 
 
 def _format_restrict_datetime(value: datetime.datetime) -> str:
@@ -386,12 +388,15 @@ class OutlookComClient:
             location = _safe_str(getattr(item, "Location", ""))
             global_id = _safe_str(getattr(item, "GlobalAppointmentID", "")) or None
             is_all_day = bool(getattr(item, "AllDayEvent", False))
+            body = _safe_str(getattr(item, "Body", ""))
+            online_meeting_url = extract_teams_join_url(location, body)
             return CalendarEvent(
                 entry_id=entry_id,
                 subject=subject,
                 start=start,
                 end=end,
                 location=location,
+                online_meeting_url=online_meeting_url,
                 global_appointment_id=global_id,
                 is_all_day=is_all_day,
             )
@@ -451,6 +456,11 @@ def mail_item_from_com(item: Any) -> MailItem | None:
         sender_email = sender_email_from_com_mail_item(item)
         received_at = _com_to_datetime(getattr(item, "ReceivedTime", datetime.datetime.now()))
         store_id = store_id_from_com_item(item)
+        body_preview = plain_text_first_line(_safe_str(getattr(item, "Body", "")))
+        try:
+            is_high_importance = int(getattr(item, "Importance", 1)) == _OL_IMPORTANCE_HIGH
+        except Exception:
+            is_high_importance = False
         return MailItem(
             entry_id=entry_id,
             subject=subject,
@@ -458,6 +468,8 @@ def mail_item_from_com(item: Any) -> MailItem | None:
             sender_email=sender_email,
             received_at=received_at,
             store_id=store_id,
+            body_preview=body_preview,
+            is_high_importance=is_high_importance,
         )
     except Exception:
         return None

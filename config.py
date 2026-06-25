@@ -1609,6 +1609,9 @@ def get_outlook_settings() -> dict:
         "reminded_events": raw.get("reminded_events")
         if isinstance(raw.get("reminded_events"), dict)
         else {},
+        "snoozed_events": raw.get("snoozed_events")
+        if isinstance(raw.get("snoozed_events"), dict)
+        else {},
         "notify_pet_index": _normalize_notify_pet_index(raw.get("notify_pet_index")),
         "notify_when_paused": bool(raw.get("notify_when_paused", True)),
         "include_shared_mailboxes": bool(raw.get("include_shared_mailboxes", False)),
@@ -1654,6 +1657,11 @@ def get_outlook_seen_mail_entry_ids() -> list[str]:
 def get_outlook_reminded_events() -> dict:
     reminded = get_outlook_settings()["reminded_events"]
     return dict(reminded) if isinstance(reminded, dict) else {}
+
+
+def get_outlook_snoozed_events() -> dict:
+    snoozed = get_outlook_settings()["snoozed_events"]
+    return dict(snoozed) if isinstance(snoozed, dict) else {}
 
 
 def get_outlook_notify_pet_index() -> int:
@@ -1763,6 +1771,11 @@ def set_outlook_reminded_events(reminded_events: dict) -> None:
     _save_outlook_partial({"reminded_events": payload})
 
 
+def set_outlook_snoozed_events(snoozed_events: dict) -> None:
+    payload = snoozed_events if isinstance(snoozed_events, dict) else {}
+    _save_outlook_partial({"snoozed_events": payload})
+
+
 AMBIENT_SPEECH_PHRASES: dict[str, list[str]] = {
     "en": [
         "*yawn*",
@@ -1827,18 +1840,22 @@ def get_ambient_phrase(event: str | None = None) -> str | None:
 # On-pet speech bubbles (short chat replies)
 # ---------------------------------------------------------------------------
 
-SPEECH_BUBBLE_MAX_CHARS: int = 120
+SPEECH_BUBBLE_MAX_CHARS: int = 220
 SPEECH_BUBBLE_DURATION_MS: int = 7_000
 SPEECH_BUBBLE_GAP_PX: int = 6
-SPEECH_BUBBLE_MAX_WIDTH: int = 210
+SPEECH_BUBBLE_MAX_WIDTH: int = 260
 SPEECH_BUBBLE_PADDING_PX: int = 10
+MEETING_SNOOZE_MINUTES: int = 5
+MAIL_BODY_PREVIEW_MAX_CHARS: int = 60
+MEETING_LOCATION_MAX_CHARS: int = 70
 
 
 def format_speech_bubble_text(text: str) -> str | None:
     """Return bubble text for short replies, or None when too long for a bubble."""
-    collapsed = " ".join(text.split())
-    if not collapsed:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
         return None
+    collapsed = "\n".join(lines)
     if len(collapsed) > SPEECH_BUBBLE_MAX_CHARS:
         return None
     return collapsed

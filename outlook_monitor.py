@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import logging
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Callable
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
 from config import (
+    MAIL_BODY_PREVIEW_MAX_CHARS,
+    MEETING_LOCATION_MAX_CHARS,
+    MEETING_SNOOZE_MINUTES,
     OUTLOOK_NOTIFY_PET_FIRST_VISIBLE,
     format_speech_bubble_text,
     get_outlook_calendar_enabled,
@@ -23,13 +26,22 @@ from config import (
     get_outlook_notify_when_paused,
     get_outlook_reminded_events,
     get_outlook_seen_mail_entry_ids,
+    get_outlook_snoozed_events,
     get_outlook_source,
     set_outlook_reminded_events,
     set_outlook_seen_mail_entry_ids,
+    set_outlook_snoozed_events,
 )
 from outlook_logging import format_event_log_summary, format_mail_log_summary
 from outlook_models import CalendarEvent, MailItem
-from outlook_poll_worker import OutlookPollResult, OutlookPollWorker
+from outlook_poll_worker import (
+    OutlookPollFailure,
+    OutlookPollFailureReason,
+    OutlookPollResult,
+    OutlookPollWorker,
+    format_poll_failure_tray_hint,
+)
+from outlook_text import truncate_notification_line
 from pet_window import PetWindow
 
 TrayNotifier = Callable[[str, str], None]
@@ -43,21 +55,44 @@ def _reminder_key(entry_id: str, minutes: int) -> str:
 
 def format_mail_notification(mail: MailItem) -> str:
     sender = mail.sender_name.strip() or mail.sender_email
-    return f"📧 {sender}: {mail.subject}"
+    importance = "⚠️ " if mail.is_high_importance else ""
+    lines = [f"{importance}📧 {sender}: {mail.subject}"]
+    preview = truncate_notification_line(
+        mail.body_preview,
+        max_len=MAIL_BODY_PREVIEW_MAX_CHARS,
+    )
+    if preview:
+        lines.append(preview)
+    return "\n".join(lines)
+
+
+def _meeting_location_line(event: CalendarEvent) -> str:
+    url = event.online_meeting_url.strip()
+    location = event.location.strip()
+    if url:
+        return truncate_notification_line(url, max_len=MEETING_LOCATION_MAX_CHARS)
+    if location:
+        return truncate_notification_line(location, max_len=MEETING_LOCATION_MAX_CHARS)
+    return ""
 
 
 def format_meeting_notification(event: CalendarEvent, minutes_left: int) -> str:
     title = event.subject.strip() or "(meeting)"
     if minutes_left <= 0:
-        return f"📅 {title} now"
-    return f"📅 {title} in {minutes_left} min"
+        lines = [f"📅 {title} now"]
+    else:
+        lines = [f"📅 {title} in {minutes_left} min"]
+    detail = _meeting_location_line(event)
+    if detail:
+        lines.append(detail)
+    return "\n".join(lines)
 
 
 class OutlookMonitor(QObject):
     """Timer-driven Outlook polling with deduplication and pet alerts."""
 
     mail_received = pyqtSignal(MailItem)
-    meeting_soon = pyqtSignal(CalendarEvent, int)
+    meeting_soon = pyqtSignal(CalendarEvent, int, int)
 
     def __init__(
         self,
@@ -89,6 +124,13 @@ class OutlookMonitor(QObject):
     def set_tray_notifier(self, notifier: TrayNotifier | None) -> None:
         self._tray_notifier = notifier
 
+    def _set_status_refresh_delegated(self, delegated: bool) -> None:
+        if self._outlook_status is None:
+            return
+        setter = getattr(self._outlook_status, "set_poll_refresh_delegated", None)
+        if callable(setter):
+            setter(delegated)
+
     @property
     def mail_events_active(self) -> bool:
         if self._mail_events is None:
@@ -102,6 +144,7 @@ class OutlookMonitor(QObject):
             return
         self._running = True
         self._mail_baseline_pending = True
+        self._set_status_refresh_delegated(True)
         self._restart_timers()
         self._poll_calendar()
         self._poll_mail()
@@ -113,6 +156,7 @@ class OutlookMonitor(QObject):
         self._calendar_timer.stop()
         self._stop_mail_events()
         self._cancel_worker()
+        self._set_status_refresh_delegated(False)
 
     def shutdown(self) -> None:
         """Release resources on application exit."""
@@ -258,11 +302,23 @@ class OutlookMonitor(QObject):
             return
         self._deliver_new_mail([mail])
 
-    def _on_poll_failed(self) -> None:
+    def _on_poll_failed(self, failure: object) -> None:
+        if not isinstance(failure, OutlookPollFailure):
+            failure = OutlookPollFailure(reason=OutlookPollFailureReason.UNKNOWN)
+
+        was_connected = (
+            self._outlook_status is not None
+            and getattr(self._outlook_status, "is_connected", False)
+        )
         if self._outlook_status is not None:
             report = getattr(self._outlook_status, "report_connection_lost", None)
             if callable(report):
-                report()
+                report(failure=failure)
+
+        if was_connected and self._tray_notifier is not None:
+            hint = format_poll_failure_tray_hint(failure)
+            if hint:
+                self._tray_notifier("Outlook", hint)
 
     def _on_poll_complete(self, result: object) -> None:
         if not isinstance(result, OutlookPollResult):
@@ -312,27 +368,68 @@ class OutlookMonitor(QObject):
     def _process_calendar(self, events: list[CalendarEvent]) -> None:
         now = datetime.now()
         reminded = dict(get_outlook_reminded_events())
+        snoozed = dict(get_outlook_snoozed_events())
         thresholds = get_outlook_meeting_reminder_minutes()
-        changed = False
+        reminded_changed = False
+        snoozed_changed = False
+
+        for key, until_raw in list(snoozed.items()):
+            until = self._parse_snooze_until(until_raw)
+            if until is None or now >= until:
+                del snoozed[key]
+                snoozed_changed = True
 
         for event in events:
             minutes_left = int((event.start - now).total_seconds() // 60)
             for threshold in thresholds:
                 key = _reminder_key(event.entry_id, threshold)
+                until_raw = snoozed.get(key)
+                if until_raw is not None:
+                    until = self._parse_snooze_until(until_raw)
+                    if until is not None and now < until:
+                        continue
                 if key in reminded:
                     continue
                 if 0 <= minutes_left <= threshold:
                     reminded[key] = True
-                    changed = True
+                    reminded_changed = True
                     _logger.info(
                         "Meeting reminder: %s (%s min)",
                         format_event_log_summary(event),
                         minutes_left,
                     )
-                    self.meeting_soon.emit(event, minutes_left)
+                    self.meeting_soon.emit(event, minutes_left, threshold)
 
-        if changed:
+        if reminded_changed:
             set_outlook_reminded_events(reminded)
+        if snoozed_changed:
+            set_outlook_snoozed_events(snoozed)
+
+    @staticmethod
+    def _parse_snooze_until(raw: object) -> datetime | None:
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        try:
+            return datetime.fromisoformat(raw.strip())
+        except ValueError:
+            return None
+
+    def _snooze_meeting(self, entry_id: str, threshold: int) -> None:
+        key = _reminder_key(entry_id, threshold)
+        reminded = dict(get_outlook_reminded_events())
+        if key in reminded:
+            del reminded[key]
+            set_outlook_reminded_events(reminded)
+
+        snoozed = dict(get_outlook_snoozed_events())
+        until = datetime.now() + timedelta(minutes=MEETING_SNOOZE_MINUTES)
+        snoozed[key] = until.isoformat(timespec="seconds")
+        set_outlook_snoozed_events(snoozed)
+        _logger.info(
+            "Meeting reminder snoozed for %s min: %s",
+            MEETING_SNOOZE_MINUTES,
+            key,
+        )
 
     def _persist_seen_ids(self, entry_ids: list[str]) -> None:
         trimmed = entry_ids[-_MAX_SEEN_MAIL_IDS:]
@@ -354,16 +451,38 @@ class OutlookMonitor(QObject):
             return False
         return True
 
-    def _notify(self, text: str, *, tray_title: str = "py-shimeji") -> None:
+    def _notify(
+        self,
+        text: str,
+        *,
+        tray_title: str = "py-shimeji",
+        bubble_actions: list[tuple[str, Callable[[], None]]] | None = None,
+    ) -> None:
         pet = self._pick_notify_pet()
         bubble_text = format_speech_bubble_text(text)
         if bubble_text is not None and self._should_show_bubble(pet) and pet is not None:
-            pet.show_speech_bubble(bubble_text)
+            pet.show_speech_bubble(bubble_text, actions=bubble_actions)
         elif self._tray_notifier is not None:
             self._tray_notifier(tray_title, text)
 
     def _on_mail_received(self, mail: MailItem) -> None:
         self._notify(format_mail_notification(mail))
 
-    def _on_meeting_soon(self, event: CalendarEvent, minutes_left: int) -> None:
-        self._notify(format_meeting_notification(event, minutes_left))
+    def _on_meeting_soon(
+        self,
+        event: CalendarEvent,
+        minutes_left: int,
+        threshold: int,
+    ) -> None:
+        text = format_meeting_notification(event, minutes_left)
+        snooze_label = f"Snooze {MEETING_SNOOZE_MINUTES} min"
+        actions = [
+            (
+                snooze_label,
+                lambda entry_id=event.entry_id, reminder_threshold=threshold: self._snooze_meeting(
+                    entry_id,
+                    reminder_threshold,
+                ),
+            )
+        ]
+        self._notify(text, bubble_actions=actions)
