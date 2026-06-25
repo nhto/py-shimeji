@@ -13,7 +13,7 @@ from config import (
     get_saved_pet_visible,
     get_saved_pets_paused,
     get_saved_pet_count,
-    outlook_integration_available,
+    outlook_ui_available,
 )
 from display import DisplayChangeWatcher
 from pet_window import PetWindow
@@ -63,7 +63,7 @@ def main() -> int:
 
     outlook_status = None
     outlook_monitor = None
-    if outlook_integration_available():
+    if outlook_ui_available():
         from outlook_monitor import OutlookMonitor
         from outlook_status import OutlookStatusManager
 

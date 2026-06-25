@@ -7,6 +7,14 @@ from datetime import datetime
 
 
 @dataclass(frozen=True)
+class MailStore:
+    """A MAPI mail store (mailbox) in the Outlook profile."""
+
+    store_id: str
+    display_name: str
+
+
+@dataclass(frozen=True)
 class MailItem:
     """A single mailbox message."""
 

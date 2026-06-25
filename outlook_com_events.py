@@ -9,6 +9,7 @@ from typing import Any, Callable
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
 from outlook_com_client import OutlookComClient, mail_item_from_com
+from outlook_logging import format_mail_log_summary
 from outlook_models import MailItem
 
 _logger = logging.getLogger(__name__)
@@ -136,4 +137,5 @@ class OutlookComMailEventSource(QObject):
         mail = mail_item_from_com(item)
         if mail is None:
             return
+        _logger.info("COM mail event: %s", format_mail_log_summary(mail))
         self.mail_received.emit(mail)
