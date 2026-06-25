@@ -62,10 +62,17 @@ def main() -> int:
     display_watcher = DisplayChangeWatcher(pets, parent=pets[0] if pets else None)
 
     outlook_status = None
+    outlook_monitor = None
     if outlook_integration_available():
+        from outlook_monitor import OutlookMonitor
         from outlook_status import OutlookStatusManager
 
         outlook_status = OutlookStatusManager(parent=pets[0] if pets else None)
+        outlook_monitor = OutlookMonitor(
+            pets,
+            outlook_status=outlook_status,
+            parent=pets[0] if pets else None,
+        )
 
     if QSystemTrayIcon.isSystemTrayAvailable():
         app.setQuitOnLastWindowClosed(False)
@@ -75,11 +82,16 @@ def main() -> int:
             exclude_hwnds=exclude_hwnds,
             display_watcher=display_watcher,
             outlook_status=outlook_status,
+            outlook_monitor=outlook_monitor,
         )
+        if outlook_monitor is not None:
+            outlook_monitor.set_tray_notifier(tray.show_outlook_tray_message)
         for pet in pets:
             pet.set_context_menu_handler(tray.show_context_menu)
         if outlook_status is not None and get_outlook_enabled():
             outlook_status.try_restore_connection()
+        if outlook_monitor is not None and get_outlook_enabled():
+            outlook_monitor.start()
     elif not any(pet.isVisible() for pet in pets):
         return 0
 

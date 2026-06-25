@@ -642,6 +642,12 @@ TRAY_TOOLTIP_OUTLOOK_UNREAD_LABELS: dict[str, str] = {
     "zh-Hant": "py-shimeji · Outlook：{count} 封未讀",
 }
 
+TRAY_TOOLTIP_OUTLOOK_UNAVAILABLE_LABELS: dict[str, str] = {
+    "en": "py-shimeji · Outlook: not available",
+    "zh-Hans": "py-shimeji · Outlook：不可用",
+    "zh-Hant": "py-shimeji · Outlook：不可用",
+}
+
 OUTLOOK_DIALOG_TITLE_LABELS: dict[str, str] = {
     "en": "Outlook settings",
     "zh-Hans": "Outlook 设置",
