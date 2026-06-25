@@ -177,6 +177,8 @@ py-shimeji/
 ├── outlook_graph_auth.py    # MSAL sign-in for Graph API
 ├── outlook_graph_client.py  # Microsoft Graph mail/calendar client
 ├── outlook_backend.py       # COM vs Graph backend factory
+├── outlook_poll_worker.py   # Background mail/calendar fetch
+├── outlook_monitor.py       # Polling, dedup, pet notifications
 ├── outlook_status.py        # Tray connection state + unread polling
 ├── outlook_settings_dialog.py  # Outlook connect status and toggles
 ├── py-shimeji.spec  # PyInstaller build spec

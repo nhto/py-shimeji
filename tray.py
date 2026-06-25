@@ -43,7 +43,9 @@ from config import (
     TRAY_QUIT_LABELS,
     TRAY_SHOW_PET_LABELS,
     TRAY_TOOLTIP_OUTLOOK_UNREAD_LABELS,
+    TRAY_TOOLTIP_OUTLOOK_UNAVAILABLE_LABELS,
     get_chat_language,
+    get_outlook_enabled,
     get_pet_sprites_dir,
     get_saved_pet_visible,
     get_saved_pets_paused,
@@ -59,6 +61,7 @@ from sprite_picker_dialog import open_sprite_picker_dialog
 
 if TYPE_CHECKING:
     from display import DisplayChangeWatcher
+    from outlook_monitor import OutlookMonitor
     from outlook_status import OutlookStatusManager
 
 
@@ -96,12 +99,14 @@ class SystemTray:
         exclude_hwnds: set[int] | None = None,
         display_watcher: DisplayChangeWatcher | None = None,
         outlook_status: OutlookStatusManager | None = None,
+        outlook_monitor: OutlookMonitor | None = None,
     ) -> None:
         self._app = app
         self._pets = pets
         self._exclude_hwnds = exclude_hwnds if exclude_hwnds is not None else set()
         self._display_watcher = display_watcher
         self._outlook_status = outlook_status
+        self._outlook_monitor = outlook_monitor
         self._tray = QSystemTrayIcon(_build_tray_icon(), parent=pets[0] if pets else None)
         self._update_tray_tooltip()
 
@@ -327,8 +332,20 @@ class SystemTray:
                     count=self._outlook_status.unread_count
                 )
             )
+        elif self._outlook_status is not None and get_outlook_enabled():
+            self._tray.setToolTip(
+                localized(TRAY_TOOLTIP_OUTLOOK_UNAVAILABLE_LABELS, lang)
+            )
         else:
             self._tray.setToolTip("py-shimeji")
+
+    def show_outlook_tray_message(self, title: str, body: str) -> None:
+        self._tray.showMessage(
+            title,
+            body,
+            QSystemTrayIcon.MessageIcon.Information,
+            8_000,
+        )
 
     def _on_outlook_status_changed(self) -> None:
         self._refresh_outlook_menu_state()
@@ -494,6 +511,8 @@ class SystemTray:
         language = get_chat_language()
         if self._outlook_status.connect_outlook():
             email = self._outlook_status.email or "(unknown)"
+            if self._outlook_monitor is not None:
+                self._outlook_monitor.start()
             self._refresh_menu_state()
             self._tray.showMessage(
                 "py-shimeji",
@@ -516,6 +535,8 @@ class SystemTray:
     def _disconnect_outlook(self) -> None:
         if self._outlook_status is None:
             return
+        if self._outlook_monitor is not None:
+            self._outlook_monitor.stop()
         self._outlook_status.disconnect_outlook()
         language = get_chat_language()
         self._refresh_menu_state()
@@ -536,6 +557,10 @@ class SystemTray:
         )
         if dialog is None:
             return
+        if self._outlook_monitor is not None:
+            self._outlook_monitor.stop()
+            if self._outlook_status is not None and self._outlook_status.is_connected:
+                self._outlook_monitor.start()
         language = get_chat_language()
         self._refresh_menu_state()
         self._tray.showMessage(
@@ -546,6 +571,8 @@ class SystemTray:
         )
 
     def _quit(self) -> None:
+        if self._outlook_monitor is not None:
+            self._outlook_monitor.shutdown()
         if self._outlook_status is not None:
             self._outlook_status.shutdown()
         self._tray.hide()
