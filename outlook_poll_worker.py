@@ -44,8 +44,24 @@ class OutlookPollWorker(QThread):
         self._source = source or get_outlook_source()
 
     def run(self) -> None:
+        if self.isInterruptionRequested():
+            return
+
+        com_initialized = False
+        if self._source != "graph":
+            try:
+                import pythoncom
+
+                pythoncom.CoInitialize()
+                com_initialized = True
+            except ImportError:
+                pass
+
         backend = create_outlook_backend(self._source)
         try:
+            if self.isInterruptionRequested():
+                return
+
             if self._source == "graph":
                 connected = backend.connect(interactive=False)
             else:
@@ -55,15 +71,25 @@ class OutlookPollWorker(QThread):
                 self.poll_failed.emit()
                 return
 
+            if self.isInterruptionRequested():
+                return
+
             mail_items: list[MailItem] = []
             calendar_events: list[CalendarEvent] = []
             if self._poll_mail:
                 mail_items = backend.list_unread_messages(max_count=20)
+            if self.isInterruptionRequested():
+                return
             if self._poll_calendar:
                 calendar_events = backend.list_upcoming_events(within_hours=24)
+            if self.isInterruptionRequested():
+                return
 
             email = backend.get_current_user_email()
             unread_count = backend.get_unread_inbox_count()
+            if self.isInterruptionRequested():
+                return
+
             self.poll_complete.emit(
                 OutlookPollResult(
                     mail_items=mail_items,
@@ -76,6 +102,11 @@ class OutlookPollWorker(QThread):
                 )
             )
         except Exception:
-            self.poll_failed.emit()
+            if not self.isInterruptionRequested():
+                self.poll_failed.emit()
         finally:
             backend.close()
+            if com_initialized:
+                import pythoncom
+
+                pythoncom.CoUninitialize()

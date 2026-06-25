@@ -92,6 +92,8 @@ AZURE_TENANT_ID=organizations
 .venv\Scripts\python scripts\demo_outlook_com_client.py
 ```
 
+**Real-time mail (classic COM only):** when connected via **Classic Outlook desktop (COM)**, new mail can trigger pet bubbles via inbox `OnItemAdd` / `NewMailEx` events. **Mail polling still runs every 45s as a backup** — required when using the New Outlook UI, because COM events often do not fire there even though inbox reads work. If pets are hidden, notifications appear in the **system tray** instead.
+
 ## Run
 
 ```bash
@@ -178,6 +180,7 @@ py-shimeji/
 ├── outlook_graph_client.py  # Microsoft Graph mail/calendar client
 ├── outlook_backend.py       # COM vs Graph backend factory
 ├── outlook_poll_worker.py   # Background mail/calendar fetch
+├── outlook_com_events.py    # Real-time classic Outlook inbox COM events
 ├── outlook_monitor.py       # Polling, dedup, pet notifications
 ├── outlook_status.py        # Tray connection state + unread polling
 ├── outlook_settings_dialog.py  # Outlook connect status and toggles

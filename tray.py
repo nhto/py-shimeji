@@ -554,13 +554,10 @@ class SystemTray:
             parent,
             pet=pet,
             outlook_status=self._outlook_status,
+            outlook_monitor=self._outlook_monitor,
         )
         if dialog is None:
             return
-        if self._outlook_monitor is not None:
-            self._outlook_monitor.stop()
-            if self._outlook_status is not None and self._outlook_status.is_connected:
-                self._outlook_monitor.start()
         language = get_chat_language()
         self._refresh_menu_state()
         self._tray.showMessage(
