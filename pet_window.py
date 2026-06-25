@@ -302,14 +302,19 @@ class PetWindow(QWidget):
         set_saved_pet_sprites_dir(self._pet_index, sprites_dir)
         self.update()
 
-    def show_speech_bubble(self, text: str) -> None:
+    def show_speech_bubble(
+        self,
+        text: str,
+        *,
+        actions: list[tuple[str, Callable[[], None]]] | None = None,
+    ) -> None:
         """Show a short-lived speech bubble above the pet."""
         bubble_text = format_speech_bubble_text(text)
         if bubble_text is None or not self.isVisible():
             return
         if self._speech_bubble is None:
             self._speech_bubble = SpeechBubbleWindow(self)
-        self._speech_bubble.show_text(bubble_text)
+        self._speech_bubble.show_text(bubble_text, actions=actions)
 
     def _reposition_speech_bubble(self) -> None:
         if self._speech_bubble is not None and self._speech_bubble.isVisible():

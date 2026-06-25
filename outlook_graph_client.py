@@ -12,6 +12,7 @@ from typing import Any
 
 from outlook_graph_auth import GRAPH_SCOPES, acquire_graph_token, outlook_graph_configured
 from outlook_models import CalendarEvent, MailItem
+from outlook_text import extract_teams_join_url, plain_text_first_line
 
 GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 
@@ -97,7 +98,7 @@ class OutlookGraphClient:
                 "$filter": "isRead eq false",
                 "$top": str(top),
                 "$orderby": "receivedDateTime desc",
-                "$select": "id,subject,from,receivedDateTime",
+                "$select": "id,subject,from,receivedDateTime,bodyPreview,importance",
             }
         )
         payload = self._get(f"/me/messages?{query}")
@@ -130,7 +131,7 @@ class OutlookGraphClient:
                 "startDateTime": now.isoformat().replace("+00:00", "Z"),
                 "endDateTime": end.isoformat().replace("+00:00", "Z"),
                 "$orderby": "start/dateTime",
-                "$select": "id,subject,start,end,location,isAllDay,iCalUId",
+                "$select": "id,subject,start,end,location,isAllDay,iCalUId,onlineMeeting,body",
             }
         )
         payload = self._get(f"/me/calendarView?{query}")
@@ -206,12 +207,16 @@ class OutlookGraphClient:
             if received_raw
             else datetime.now()
         )
+        body_preview = plain_text_first_line(str(message.get("bodyPreview") or ""))
+        importance = str(message.get("importance") or "normal").strip().lower()
         return MailItem(
             entry_id=entry_id,
             subject=subject,
             sender_name=sender_name,
             sender_email=sender_email,
             received_at=received_at,
+            body_preview=body_preview,
+            is_high_importance=importance == "high",
         )
 
     def _calendar_event_from_graph(self, event: dict[str, Any]) -> CalendarEvent | None:
@@ -236,12 +241,24 @@ class OutlookGraphClient:
         if isinstance(location_info, dict):
             location = str(location_info.get("displayName") or "")
 
+        online_meeting_url = ""
+        online_meeting = event.get("onlineMeeting", {})
+        if isinstance(online_meeting, dict):
+            online_meeting_url = str(online_meeting.get("joinUrl") or "").strip()
+        if not online_meeting_url:
+            body_info = event.get("body", {})
+            body_content = ""
+            if isinstance(body_info, dict):
+                body_content = str(body_info.get("content") or "")
+            online_meeting_url = extract_teams_join_url(location, body_content)
+
         return CalendarEvent(
             entry_id=entry_id,
             subject=str(event.get("subject") or "(no subject)"),
             start=_parse_graph_datetime(start_raw),
             end=_parse_graph_datetime(end_raw) if end_raw else _parse_graph_datetime(start_raw),
             location=location,
+            online_meeting_url=online_meeting_url,
             global_appointment_id=str(event.get("iCalUId") or "") or None,
             is_all_day=bool(event.get("isAllDay", False)),
         )

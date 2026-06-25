@@ -24,6 +24,8 @@ class MailItem:
     sender_email: str
     received_at: datetime
     store_id: str | None = None
+    body_preview: str = ""
+    is_high_importance: bool = False
 
 
 @dataclass(frozen=True)
@@ -35,5 +37,6 @@ class CalendarEvent:
     start: datetime
     end: datetime
     location: str = ""
+    online_meeting_url: str = ""
     global_appointment_id: str | None = None
     is_all_day: bool = False
