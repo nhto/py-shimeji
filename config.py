@@ -790,9 +790,9 @@ OUTLOOK_DIALOG_MAIL_EVENTS_HINT_LABELS: dict[str, str] = {
 }
 
 OUTLOOK_DIALOG_CALENDAR_HINT_LABELS: dict[str, str] = {
-    "en": "When enabled, upcoming meetings can trigger pet reminders in a later phase.",
-    "zh-Hans": "启用后，即将到来的会议可在后续阶段触发宠物提醒。",
-    "zh-Hant": "啟用後，即將到來的會議可在後續階段觸發寵物提醒。",
+    "en": "When enabled, upcoming meetings trigger pet reminders before they start.",
+    "zh-Hans": "启用后，会议开始前会触发宠物提醒。",
+    "zh-Hant": "啟用後，會議開始前會觸發寵物提醒。",
 }
 
 OUTLOOK_DIALOG_SAVE_LABELS: dict[str, str] = {
@@ -817,6 +817,54 @@ OUTLOOK_DIALOG_TEST_FAIL_LABELS: dict[str, str] = {
     "en": "Connection failed — open classic Outlook and try again.",
     "zh-Hans": "连接失败 — 请打开经典 Outlook 后重试。",
     "zh-Hant": "連線失敗 — 請開啟傳統 Outlook 後重試。",
+}
+
+OUTLOOK_DIALOG_NOTIFY_PET_LABELS: dict[str, str] = {
+    "en": "Notify pet",
+    "zh-Hans": "通知宠物",
+    "zh-Hant": "通知寵物",
+}
+
+OUTLOOK_DIALOG_NOTIFY_PET_FIRST_VISIBLE_LABELS: dict[str, str] = {
+    "en": "First visible pet",
+    "zh-Hans": "第一个可见宠物",
+    "zh-Hant": "第一個可見寵物",
+}
+
+OUTLOOK_DIALOG_NOTIFY_PET_NUMBER_LABELS: dict[str, str] = {
+    "en": "Pet {number}",
+    "zh-Hans": "宠物 {number}",
+    "zh-Hant": "寵物 {number}",
+}
+
+OUTLOOK_DIALOG_NOTIFY_PET_HINT_LABELS: dict[str, str] = {
+    "en": "Which pet shows mail and calendar speech bubbles.",
+    "zh-Hans": "由哪只宠物显示邮件和日历气泡。",
+    "zh-Hant": "由哪隻寵物顯示郵件和行事曆氣泡。",
+}
+
+OUTLOOK_DIALOG_NOTIFY_WHEN_PAUSED_LABELS: dict[str, str] = {
+    "en": "Show notifications while pets are paused",
+    "zh-Hans": "宠物暂停时仍显示通知",
+    "zh-Hant": "寵物暫停時仍顯示通知",
+}
+
+OUTLOOK_DIALOG_NOTIFY_WHEN_PAUSED_HINT_LABELS: dict[str, str] = {
+    "en": "When off, paused pets use the system tray instead of speech bubbles.",
+    "zh-Hans": "关闭后，暂停中的宠物改用系统托盘通知。",
+    "zh-Hant": "關閉後，暫停中的寵物改用系統匣通知。",
+}
+
+OUTLOOK_DIALOG_SHARED_MAILBOXES_LABELS: dict[str, str] = {
+    "en": "Include shared and additional mailboxes",
+    "zh-Hans": "包含共享和其他邮箱",
+    "zh-Hant": "包含共用和其他信箱",
+}
+
+OUTLOOK_DIALOG_SHARED_MAILBOXES_HINT_LABELS: dict[str, str] = {
+    "en": "Classic COM only. Polls every inbox in your Outlook profile, not just the default.",
+    "zh-Hans": "仅经典 COM。轮询 Outlook 配置中的所有收件箱，不仅是默认邮箱。",
+    "zh-Hant": "僅傳統 COM。輪詢 Outlook 設定中的所有收件箱，不僅是預設信箱。",
 }
 
 PREFERENCES_TITLE_LABELS: dict[str, str] = {
@@ -1388,6 +1436,7 @@ OUTLOOK_CALENDAR_POLL_INTERVAL_SEC_DEFAULT: int = 60
 OUTLOOK_MEETING_REMINDER_MINUTES_DEFAULT: list[int] = [15, 5]
 OUTLOOK_MAIL_POLL_INTERVAL_SEC_MIN: int = 15
 OUTLOOK_MAIL_POLL_INTERVAL_SEC_MAX: int = 3600
+OUTLOOK_NOTIFY_PET_FIRST_VISIBLE: int = -1
 
 
 def outlook_com_supported() -> bool:
@@ -1411,6 +1460,13 @@ def outlook_graph_configured() -> bool:
 def outlook_integration_available() -> bool:
     """True when at least one Outlook backend can be used."""
     return outlook_graph_configured() or outlook_com_supported()
+
+
+def outlook_ui_available() -> bool:
+    """True when Outlook tray menu and settings should be shown."""
+    if sys.platform != "win32":
+        return False
+    return outlook_integration_available()
 
 
 def is_new_outlook_preferred() -> bool:
@@ -1512,6 +1568,18 @@ def _normalize_string_list(value: object) -> list[str]:
     return result
 
 
+def _normalize_notify_pet_index(value: object) -> int:
+    if value == OUTLOOK_NOTIFY_PET_FIRST_VISIBLE:
+        return OUTLOOK_NOTIFY_PET_FIRST_VISIBLE
+    try:
+        index = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return OUTLOOK_NOTIFY_PET_FIRST_VISIBLE
+    if index < 0:
+        return OUTLOOK_NOTIFY_PET_FIRST_VISIBLE
+    return min(index, MAX_PETS - 1)
+
+
 def get_outlook_settings() -> dict:
     """Return normalized Outlook settings with defaults applied."""
     raw = _outlook_settings_raw()
@@ -1541,6 +1609,10 @@ def get_outlook_settings() -> dict:
         "reminded_events": raw.get("reminded_events")
         if isinstance(raw.get("reminded_events"), dict)
         else {},
+        "notify_pet_index": _normalize_notify_pet_index(raw.get("notify_pet_index")),
+        "notify_when_paused": bool(raw.get("notify_when_paused", True)),
+        "include_shared_mailboxes": bool(raw.get("include_shared_mailboxes", False)),
+        "mailbox_store_ids": _normalize_string_list(raw.get("mailbox_store_ids")),
     }
 
 
@@ -1584,6 +1656,22 @@ def get_outlook_reminded_events() -> dict:
     return dict(reminded) if isinstance(reminded, dict) else {}
 
 
+def get_outlook_notify_pet_index() -> int:
+    return int(get_outlook_settings()["notify_pet_index"])
+
+
+def get_outlook_notify_when_paused() -> bool:
+    return bool(get_outlook_settings()["notify_when_paused"])
+
+
+def get_outlook_include_shared_mailboxes() -> bool:
+    return bool(get_outlook_settings()["include_shared_mailboxes"])
+
+
+def get_outlook_mailbox_store_ids() -> list[str]:
+    return list(get_outlook_settings()["mailbox_store_ids"])
+
+
 def _save_outlook_partial(updates: dict) -> None:
     data = _load_app_settings()
     outlook = data.setdefault("outlook", {})
@@ -1619,6 +1707,10 @@ def set_outlook_settings(
     mail_poll_interval_sec: int | None = None,
     calendar_poll_interval_sec: int | None = None,
     meeting_reminder_minutes: list[int] | None = None,
+    notify_pet_index: int | None = None,
+    notify_when_paused: bool | None = None,
+    include_shared_mailboxes: bool | None = None,
+    mailbox_store_ids: list[str] | None = None,
 ) -> None:
     """Persist user-facing Outlook settings from the settings dialog."""
     updates: dict[str, object] = {}
@@ -1650,6 +1742,14 @@ def set_outlook_settings(
         updates["meeting_reminder_minutes"] = _normalize_reminder_minutes(
             meeting_reminder_minutes
         )
+    if notify_pet_index is not None:
+        updates["notify_pet_index"] = _normalize_notify_pet_index(notify_pet_index)
+    if notify_when_paused is not None:
+        updates["notify_when_paused"] = bool(notify_when_paused)
+    if include_shared_mailboxes is not None:
+        updates["include_shared_mailboxes"] = bool(include_shared_mailboxes)
+    if mailbox_store_ids is not None:
+        updates["mailbox_store_ids"] = _normalize_string_list(mailbox_store_ids)
     if updates:
         _save_outlook_partial(updates)
 

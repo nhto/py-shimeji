@@ -17,7 +17,19 @@ from outlook_com_constants import (
     PR_SENDER_SMTP_ADDRESS,
     PR_SMTP_ADDRESS,
 )
-from outlook_models import CalendarEvent, MailItem
+from outlook_models import CalendarEvent, MailItem, MailStore
+
+try:
+    from config import (
+        get_outlook_include_shared_mailboxes,
+        get_outlook_mailbox_store_ids,
+    )
+except ImportError:  # pragma: no cover - script import edge case
+    def get_outlook_include_shared_mailboxes() -> bool:
+        return False
+
+    def get_outlook_mailbox_store_ids() -> list[str]:
+        return []
 
 _OUTLOOK_START_TIMEOUT_SEC = 45
 _CALENDAR_SCAN_LIMIT = 500
@@ -119,31 +131,60 @@ class OutlookComClient:
         return None
 
     def get_unread_inbox_count(self) -> int | None:
-        """Return the unread message count for the default inbox."""
+        """Return the unread message count across configured inboxes."""
         if not self._connect():
             return None
-        assert self._namespace is not None
-        try:
-            inbox = self._namespace.GetDefaultFolder(OL_FOLDER_INBOX)
-            return int(inbox.Items.Restrict("[UnRead] = True").Count)
-        except Exception:
+        total = 0
+        found = False
+        for inbox in self._iter_inboxes():
+            try:
+                total += int(inbox.Items.Restrict("[UnRead] = True").Count)
+                found = True
+            except Exception:
+                continue
+        if not found:
             self._reset_connection()
             return None
+        return total
 
     def list_unread_messages(self, max_count: int = 10) -> list[MailItem]:
-        """Return up to max_count unread messages from the default inbox."""
+        """Return up to max_count unread messages from configured inboxes."""
         if max_count <= 0 or not self._connect():
             return []
-        assert self._namespace is not None
 
-        try:
-            inbox = self._namespace.GetDefaultFolder(OL_FOLDER_INBOX)
-            restricted = inbox.Items.Restrict("[UnRead] = True")
-            restricted.Sort("[ReceivedTime]", True)
-            return self._collect_mail_items(restricted, max_count)
-        except Exception:
-            self._reset_connection()
+        collected: list[MailItem] = []
+        seen_entry_ids: set[str] = set()
+        for inbox in self._iter_inboxes():
+            try:
+                restricted = inbox.Items.Restrict("[UnRead] = True")
+                restricted.Sort("[ReceivedTime]", True)
+                for mail in self._collect_mail_items(restricted, max_count):
+                    if mail.entry_id in seen_entry_ids:
+                        continue
+                    seen_entry_ids.add(mail.entry_id)
+                    collected.append(mail)
+                    if len(collected) >= max_count:
+                        break
+            except Exception:
+                continue
+            if len(collected) >= max_count:
+                break
+
+        collected.sort(key=lambda mail: mail.received_at, reverse=True)
+        return collected[:max_count]
+
+    def list_mail_stores(self) -> list[MailStore]:
+        """Return mail stores in the signed-in Outlook profile."""
+        if not self._connect():
             return []
+        stores: list[MailStore] = []
+        for store in self._iter_stores():
+            store_id = _safe_str(getattr(store, "StoreID", ""))
+            if not store_id:
+                continue
+            display_name = _safe_str(getattr(store, "DisplayName", ""), store_id)
+            stores.append(MailStore(store_id=store_id, display_name=display_name))
+        return stores
 
     def list_upcoming_events(self, within_hours: int = 24) -> list[CalendarEvent]:
         """Return appointments starting within the next within_hours from now."""
@@ -255,6 +296,52 @@ class OutlookComClient:
     def _reset_connection(self) -> None:
         self._outlook = None
         self._namespace = None
+
+    def _iter_stores(self):
+        assert self._namespace is not None
+        try:
+            stores = self._namespace.Stores
+            count = int(stores.Count)
+        except Exception:
+            return
+        for index in range(1, count + 1):
+            try:
+                yield stores.Item(index)
+            except Exception:
+                continue
+
+    def _inbox_for_store_id(self, store_id: str) -> Any | None:
+        for store in self._iter_stores():
+            if _safe_str(getattr(store, "StoreID", "")) != store_id:
+                continue
+            try:
+                return store.GetDefaultFolder(OL_FOLDER_INBOX)
+            except Exception:
+                return None
+        return None
+
+    def _iter_inboxes(self):
+        assert self._namespace is not None
+        store_ids = get_outlook_mailbox_store_ids()
+        if store_ids:
+            for store_id in store_ids:
+                inbox = self._inbox_for_store_id(store_id)
+                if inbox is not None:
+                    yield inbox
+            return
+
+        if get_outlook_include_shared_mailboxes():
+            for store in self._iter_stores():
+                try:
+                    yield store.GetDefaultFolder(OL_FOLDER_INBOX)
+                except Exception:
+                    continue
+            return
+
+        try:
+            yield self._namespace.GetDefaultFolder(OL_FOLDER_INBOX)
+        except Exception:
+            return
 
     def _collect_mail_items(self, items: Any, max_count: int) -> list[MailItem]:
         result: list[MailItem] = []

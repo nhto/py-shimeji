@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 from datetime import datetime
 from typing import Callable
@@ -9,6 +10,7 @@ from typing import Callable
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
 from config import (
+    OUTLOOK_NOTIFY_PET_FIRST_VISIBLE,
     format_speech_bubble_text,
     get_outlook_calendar_enabled,
     get_outlook_calendar_poll_interval_sec,
@@ -17,18 +19,21 @@ from config import (
     get_outlook_mail_events_enabled,
     get_outlook_mail_poll_interval_sec,
     get_outlook_meeting_reminder_minutes,
+    get_outlook_notify_pet_index,
+    get_outlook_notify_when_paused,
     get_outlook_reminded_events,
     get_outlook_seen_mail_entry_ids,
     get_outlook_source,
     set_outlook_reminded_events,
     set_outlook_seen_mail_entry_ids,
 )
+from outlook_logging import format_event_log_summary, format_mail_log_summary
 from outlook_models import CalendarEvent, MailItem
 from outlook_poll_worker import OutlookPollResult, OutlookPollWorker
 from pet_window import PetWindow
 
 TrayNotifier = Callable[[str, str], None]
-
+_logger = logging.getLogger(__name__)
 _MAX_SEEN_MAIL_IDS = 500
 
 
@@ -300,6 +305,7 @@ class OutlookMonitor(QObject):
                 continue
             seen_set.add(mail.entry_id)
             seen_ids.append(mail.entry_id)
+            _logger.info("New mail: %s", format_mail_log_summary(mail))
             self.mail_received.emit(mail)
         self._persist_seen_ids(seen_ids)
 
@@ -318,6 +324,11 @@ class OutlookMonitor(QObject):
                 if 0 <= minutes_left <= threshold:
                     reminded[key] = True
                     changed = True
+                    _logger.info(
+                        "Meeting reminder: %s (%s min)",
+                        format_event_log_summary(event),
+                        minutes_left,
+                    )
                     self.meeting_soon.emit(event, minutes_left)
 
         if changed:
@@ -328,15 +339,25 @@ class OutlookMonitor(QObject):
         set_outlook_seen_mail_entry_ids(trimmed)
 
     def _pick_notify_pet(self) -> PetWindow | None:
+        index = get_outlook_notify_pet_index()
+        if index != OUTLOOK_NOTIFY_PET_FIRST_VISIBLE and 0 <= index < len(self._pets):
+            return self._pets[index]
         for pet in self._pets:
             if pet.isVisible():
                 return pet
         return self._pets[0] if self._pets else None
 
+    def _should_show_bubble(self, pet: PetWindow | None) -> bool:
+        if pet is None or not pet.isVisible():
+            return False
+        if pet.motion_paused and not get_outlook_notify_when_paused():
+            return False
+        return True
+
     def _notify(self, text: str, *, tray_title: str = "py-shimeji") -> None:
         pet = self._pick_notify_pet()
         bubble_text = format_speech_bubble_text(text)
-        if bubble_text is not None and pet is not None and pet.isVisible():
+        if bubble_text is not None and self._should_show_bubble(pet) and pet is not None:
             pet.show_speech_bubble(bubble_text)
         elif self._tray_notifier is not None:
             self._tray_notifier(tray_title, text)

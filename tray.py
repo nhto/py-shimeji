@@ -52,6 +52,7 @@ from config import (
     has_openrouter_api_key,
     localized,
     outlook_integration_available,
+    outlook_ui_available,
     set_saved_pet_visible,
     set_saved_pets_paused,
 )
@@ -181,7 +182,7 @@ class SystemTray:
         self._behavior_action.triggered.connect(self._open_behavior_settings)
         menu.addAction(self._behavior_action)
 
-        if outlook_integration_available() and self._outlook_status is not None:
+        if outlook_ui_available() and self._outlook_status is not None:
             menu.addSeparator()
             self._outlook_menu = menu.addMenu("")
             self._outlook_connect_action = self._outlook_menu.addAction("")
