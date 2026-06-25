@@ -642,6 +642,12 @@ TRAY_TOOLTIP_OUTLOOK_UNREAD_LABELS: dict[str, str] = {
     "zh-Hant": "py-shimeji · Outlook：{count} 封未讀",
 }
 
+TRAY_TOOLTIP_OUTLOOK_UNAVAILABLE_LABELS: dict[str, str] = {
+    "en": "py-shimeji · Outlook: not available",
+    "zh-Hans": "py-shimeji · Outlook：不可用",
+    "zh-Hant": "py-shimeji · Outlook：不可用",
+}
+
 OUTLOOK_DIALOG_TITLE_LABELS: dict[str, str] = {
     "en": "Outlook settings",
     "zh-Hans": "Outlook 设置",
@@ -766,15 +772,27 @@ OUTLOOK_DIALOG_CALENDAR_LABELS: dict[str, str] = {
 }
 
 OUTLOOK_DIALOG_MAIL_HINT_LABELS: dict[str, str] = {
-    "en": "When enabled, new unread mail can trigger pet alerts in a later phase.",
-    "zh-Hans": "启用后，未读邮件可在后续阶段触发宠物提醒。",
-    "zh-Hant": "啟用後，未讀郵件可在後續階段觸發寵物提醒。",
+    "en": "When enabled, new unread mail can trigger pet alerts.",
+    "zh-Hans": "启用后，未读邮件可触发宠物提醒。",
+    "zh-Hant": "啟用後，未讀郵件可觸發寵物提醒。",
+}
+
+OUTLOOK_DIALOG_MAIL_EVENTS_LABELS: dict[str, str] = {
+    "en": "Real-time mail (classic Outlook COM)",
+    "zh-Hans": "实时邮件（经典 Outlook COM）",
+    "zh-Hant": "即時郵件（傳統 Outlook COM）",
+}
+
+OUTLOOK_DIALOG_MAIL_EVENTS_HINT_LABELS: dict[str, str] = {
+    "en": "Instant inbox alerts via COM events. Falls back to polling if unavailable.",
+    "zh-Hans": "通过 COM 事件即时提醒；不可用时回退到轮询。",
+    "zh-Hant": "透過 COM 事件即時提醒；不可用時回退到輪詢。",
 }
 
 OUTLOOK_DIALOG_CALENDAR_HINT_LABELS: dict[str, str] = {
-    "en": "When enabled, upcoming meetings can trigger pet reminders in a later phase.",
-    "zh-Hans": "启用后，即将到来的会议可在后续阶段触发宠物提醒。",
-    "zh-Hant": "啟用後，即將到來的會議可在後續階段觸發寵物提醒。",
+    "en": "When enabled, upcoming meetings trigger pet reminders before they start.",
+    "zh-Hans": "启用后，会议开始前会触发宠物提醒。",
+    "zh-Hant": "啟用後，會議開始前會觸發寵物提醒。",
 }
 
 OUTLOOK_DIALOG_SAVE_LABELS: dict[str, str] = {
@@ -799,6 +817,54 @@ OUTLOOK_DIALOG_TEST_FAIL_LABELS: dict[str, str] = {
     "en": "Connection failed — open classic Outlook and try again.",
     "zh-Hans": "连接失败 — 请打开经典 Outlook 后重试。",
     "zh-Hant": "連線失敗 — 請開啟傳統 Outlook 後重試。",
+}
+
+OUTLOOK_DIALOG_NOTIFY_PET_LABELS: dict[str, str] = {
+    "en": "Notify pet",
+    "zh-Hans": "通知宠物",
+    "zh-Hant": "通知寵物",
+}
+
+OUTLOOK_DIALOG_NOTIFY_PET_FIRST_VISIBLE_LABELS: dict[str, str] = {
+    "en": "First visible pet",
+    "zh-Hans": "第一个可见宠物",
+    "zh-Hant": "第一個可見寵物",
+}
+
+OUTLOOK_DIALOG_NOTIFY_PET_NUMBER_LABELS: dict[str, str] = {
+    "en": "Pet {number}",
+    "zh-Hans": "宠物 {number}",
+    "zh-Hant": "寵物 {number}",
+}
+
+OUTLOOK_DIALOG_NOTIFY_PET_HINT_LABELS: dict[str, str] = {
+    "en": "Which pet shows mail and calendar speech bubbles.",
+    "zh-Hans": "由哪只宠物显示邮件和日历气泡。",
+    "zh-Hant": "由哪隻寵物顯示郵件和行事曆氣泡。",
+}
+
+OUTLOOK_DIALOG_NOTIFY_WHEN_PAUSED_LABELS: dict[str, str] = {
+    "en": "Show notifications while pets are paused",
+    "zh-Hans": "宠物暂停时仍显示通知",
+    "zh-Hant": "寵物暫停時仍顯示通知",
+}
+
+OUTLOOK_DIALOG_NOTIFY_WHEN_PAUSED_HINT_LABELS: dict[str, str] = {
+    "en": "When off, paused pets use the system tray instead of speech bubbles.",
+    "zh-Hans": "关闭后，暂停中的宠物改用系统托盘通知。",
+    "zh-Hant": "關閉後，暫停中的寵物改用系統匣通知。",
+}
+
+OUTLOOK_DIALOG_SHARED_MAILBOXES_LABELS: dict[str, str] = {
+    "en": "Include shared and additional mailboxes",
+    "zh-Hans": "包含共享和其他邮箱",
+    "zh-Hant": "包含共用和其他信箱",
+}
+
+OUTLOOK_DIALOG_SHARED_MAILBOXES_HINT_LABELS: dict[str, str] = {
+    "en": "Classic COM only. Polls every inbox in your Outlook profile, not just the default.",
+    "zh-Hans": "仅经典 COM。轮询 Outlook 配置中的所有收件箱，不仅是默认邮箱。",
+    "zh-Hant": "僅傳統 COM。輪詢 Outlook 設定中的所有收件箱，不僅是預設信箱。",
 }
 
 PREFERENCES_TITLE_LABELS: dict[str, str] = {
@@ -1370,6 +1436,7 @@ OUTLOOK_CALENDAR_POLL_INTERVAL_SEC_DEFAULT: int = 60
 OUTLOOK_MEETING_REMINDER_MINUTES_DEFAULT: list[int] = [15, 5]
 OUTLOOK_MAIL_POLL_INTERVAL_SEC_MIN: int = 15
 OUTLOOK_MAIL_POLL_INTERVAL_SEC_MAX: int = 3600
+OUTLOOK_NOTIFY_PET_FIRST_VISIBLE: int = -1
 
 
 def outlook_com_supported() -> bool:
@@ -1393,6 +1460,13 @@ def outlook_graph_configured() -> bool:
 def outlook_integration_available() -> bool:
     """True when at least one Outlook backend can be used."""
     return outlook_graph_configured() or outlook_com_supported()
+
+
+def outlook_ui_available() -> bool:
+    """True when Outlook tray menu and settings should be shown."""
+    if sys.platform != "win32":
+        return False
+    return outlook_integration_available()
 
 
 def is_new_outlook_preferred() -> bool:
@@ -1494,6 +1568,18 @@ def _normalize_string_list(value: object) -> list[str]:
     return result
 
 
+def _normalize_notify_pet_index(value: object) -> int:
+    if value == OUTLOOK_NOTIFY_PET_FIRST_VISIBLE:
+        return OUTLOOK_NOTIFY_PET_FIRST_VISIBLE
+    try:
+        index = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return OUTLOOK_NOTIFY_PET_FIRST_VISIBLE
+    if index < 0:
+        return OUTLOOK_NOTIFY_PET_FIRST_VISIBLE
+    return min(index, MAX_PETS - 1)
+
+
 def get_outlook_settings() -> dict:
     """Return normalized Outlook settings with defaults applied."""
     raw = _outlook_settings_raw()
@@ -1502,6 +1588,7 @@ def get_outlook_settings() -> dict:
         "enabled": bool(raw.get("enabled", enabled_default)),
         "source": get_outlook_source(),
         "mail_enabled": bool(raw.get("mail_enabled", True)),
+        "mail_events_enabled": bool(raw.get("mail_events_enabled", True)),
         "calendar_enabled": bool(raw.get("calendar_enabled", True)),
         "mail_poll_interval_sec": _clamp_int(
             raw.get("mail_poll_interval_sec"),
@@ -1522,6 +1609,13 @@ def get_outlook_settings() -> dict:
         "reminded_events": raw.get("reminded_events")
         if isinstance(raw.get("reminded_events"), dict)
         else {},
+        "snoozed_events": raw.get("snoozed_events")
+        if isinstance(raw.get("snoozed_events"), dict)
+        else {},
+        "notify_pet_index": _normalize_notify_pet_index(raw.get("notify_pet_index")),
+        "notify_when_paused": bool(raw.get("notify_when_paused", True)),
+        "include_shared_mailboxes": bool(raw.get("include_shared_mailboxes", False)),
+        "mailbox_store_ids": _normalize_string_list(raw.get("mailbox_store_ids")),
     }
 
 
@@ -1531,6 +1625,13 @@ def get_outlook_enabled() -> bool:
 
 def get_outlook_mail_enabled() -> bool:
     return bool(get_outlook_settings()["mail_enabled"])
+
+
+def get_outlook_mail_events_enabled() -> bool:
+    """Real-time inbox events are classic COM only."""
+    if get_outlook_source() != OUTLOOK_SOURCE_COM:
+        return False
+    return bool(get_outlook_settings()["mail_events_enabled"])
 
 
 def get_outlook_calendar_enabled() -> bool:
@@ -1558,6 +1659,27 @@ def get_outlook_reminded_events() -> dict:
     return dict(reminded) if isinstance(reminded, dict) else {}
 
 
+def get_outlook_snoozed_events() -> dict:
+    snoozed = get_outlook_settings()["snoozed_events"]
+    return dict(snoozed) if isinstance(snoozed, dict) else {}
+
+
+def get_outlook_notify_pet_index() -> int:
+    return int(get_outlook_settings()["notify_pet_index"])
+
+
+def get_outlook_notify_when_paused() -> bool:
+    return bool(get_outlook_settings()["notify_when_paused"])
+
+
+def get_outlook_include_shared_mailboxes() -> bool:
+    return bool(get_outlook_settings()["include_shared_mailboxes"])
+
+
+def get_outlook_mailbox_store_ids() -> list[str]:
+    return list(get_outlook_settings()["mailbox_store_ids"])
+
+
 def _save_outlook_partial(updates: dict) -> None:
     data = _load_app_settings()
     outlook = data.setdefault("outlook", {})
@@ -1576,6 +1698,10 @@ def set_outlook_mail_enabled(enabled: bool) -> None:
     _save_outlook_partial({"mail_enabled": bool(enabled)})
 
 
+def set_outlook_mail_events_enabled(enabled: bool) -> None:
+    _save_outlook_partial({"mail_events_enabled": bool(enabled)})
+
+
 def set_outlook_calendar_enabled(enabled: bool) -> None:
     _save_outlook_partial({"calendar_enabled": bool(enabled)})
 
@@ -1584,10 +1710,15 @@ def set_outlook_settings(
     *,
     source: str | None = None,
     mail_enabled: bool | None = None,
+    mail_events_enabled: bool | None = None,
     calendar_enabled: bool | None = None,
     mail_poll_interval_sec: int | None = None,
     calendar_poll_interval_sec: int | None = None,
     meeting_reminder_minutes: list[int] | None = None,
+    notify_pet_index: int | None = None,
+    notify_when_paused: bool | None = None,
+    include_shared_mailboxes: bool | None = None,
+    mailbox_store_ids: list[str] | None = None,
 ) -> None:
     """Persist user-facing Outlook settings from the settings dialog."""
     updates: dict[str, object] = {}
@@ -1597,6 +1728,8 @@ def set_outlook_settings(
             updates["source"] = normalized
     if mail_enabled is not None:
         updates["mail_enabled"] = bool(mail_enabled)
+    if mail_events_enabled is not None:
+        updates["mail_events_enabled"] = bool(mail_events_enabled)
     if calendar_enabled is not None:
         updates["calendar_enabled"] = bool(calendar_enabled)
     if mail_poll_interval_sec is not None:
@@ -1617,6 +1750,14 @@ def set_outlook_settings(
         updates["meeting_reminder_minutes"] = _normalize_reminder_minutes(
             meeting_reminder_minutes
         )
+    if notify_pet_index is not None:
+        updates["notify_pet_index"] = _normalize_notify_pet_index(notify_pet_index)
+    if notify_when_paused is not None:
+        updates["notify_when_paused"] = bool(notify_when_paused)
+    if include_shared_mailboxes is not None:
+        updates["include_shared_mailboxes"] = bool(include_shared_mailboxes)
+    if mailbox_store_ids is not None:
+        updates["mailbox_store_ids"] = _normalize_string_list(mailbox_store_ids)
     if updates:
         _save_outlook_partial(updates)
 
@@ -1628,6 +1769,11 @@ def set_outlook_seen_mail_entry_ids(entry_ids: list[str]) -> None:
 def set_outlook_reminded_events(reminded_events: dict) -> None:
     payload = reminded_events if isinstance(reminded_events, dict) else {}
     _save_outlook_partial({"reminded_events": payload})
+
+
+def set_outlook_snoozed_events(snoozed_events: dict) -> None:
+    payload = snoozed_events if isinstance(snoozed_events, dict) else {}
+    _save_outlook_partial({"snoozed_events": payload})
 
 
 AMBIENT_SPEECH_PHRASES: dict[str, list[str]] = {
@@ -1694,18 +1840,22 @@ def get_ambient_phrase(event: str | None = None) -> str | None:
 # On-pet speech bubbles (short chat replies)
 # ---------------------------------------------------------------------------
 
-SPEECH_BUBBLE_MAX_CHARS: int = 120
+SPEECH_BUBBLE_MAX_CHARS: int = 220
 SPEECH_BUBBLE_DURATION_MS: int = 7_000
 SPEECH_BUBBLE_GAP_PX: int = 6
-SPEECH_BUBBLE_MAX_WIDTH: int = 210
+SPEECH_BUBBLE_MAX_WIDTH: int = 260
 SPEECH_BUBBLE_PADDING_PX: int = 10
+MEETING_SNOOZE_MINUTES: int = 5
+MAIL_BODY_PREVIEW_MAX_CHARS: int = 60
+MEETING_LOCATION_MAX_CHARS: int = 70
 
 
 def format_speech_bubble_text(text: str) -> str | None:
     """Return bubble text for short replies, or None when too long for a bubble."""
-    collapsed = " ".join(text.split())
-    if not collapsed:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
         return None
+    collapsed = "\n".join(lines)
     if len(collapsed) > SPEECH_BUBBLE_MAX_CHARS:
         return None
     return collapsed

@@ -302,14 +302,19 @@ class PetWindow(QWidget):
         set_saved_pet_sprites_dir(self._pet_index, sprites_dir)
         self.update()
 
-    def show_speech_bubble(self, text: str) -> None:
+    def show_speech_bubble(
+        self,
+        text: str,
+        *,
+        actions: list[tuple[str, Callable[[], None]]] | None = None,
+    ) -> None:
         """Show a short-lived speech bubble above the pet."""
         bubble_text = format_speech_bubble_text(text)
         if bubble_text is None or not self.isVisible():
             return
         if self._speech_bubble is None:
             self._speech_bubble = SpeechBubbleWindow(self)
-        self._speech_bubble.show_text(bubble_text)
+        self._speech_bubble.show_text(bubble_text, actions=actions)
 
     def _reposition_speech_bubble(self) -> None:
         if self._speech_bubble is not None and self._speech_bubble.isVisible():
@@ -581,17 +586,27 @@ class PetWindow(QWidget):
 
     def _refresh_play_area_at(self, global_point: QPoint | None) -> None:
         """Pick the play area for *global_point* or the pet's current position."""
+        if (
+            global_point is None
+            and self._fsm.state in (PetState.FALLING, PetState.CLIMBING)
+            and self._play_area.isValid()
+        ):
+            # Keep the current monitor while airborne so corner probes do not
+            # hop to an adjacent display and teleport the pet off-screen.
+            return
+
         screen: QScreen | None = None
         if global_point is not None:
             screen = QGuiApplication.screenAt(global_point)
 
         if screen is None:
-            frame = self.frameGeometry()
-            screen = QGuiApplication.screenAt(frame.center())
+            probe = self._pet_screen_probe()
+            screen = QGuiApplication.screenAt(probe)
             if screen is None:
+                frame = self.frameGeometry()
                 screen = QGuiApplication.screenAt(frame.topLeft())
             if screen is None:
-                screen = self._nearest_screen(frame.center())
+                screen = self._nearest_screen(probe)
             if screen is None:
                 screen = QGuiApplication.primaryScreen()
 
@@ -599,6 +614,14 @@ class PetWindow(QWidget):
             self._play_area = QRect(0, 0, 1920, 1080)
             return
         self._play_area = screen.availableGeometry()
+
+    def _pet_screen_probe(self) -> QPoint:
+        """Return a screen point that stays on the pet's current display."""
+        frame = self.frameGeometry()
+        return QPoint(
+            frame.left() + PET_WIDTH // 2,
+            frame.top() + PET_HEIGHT - 1,
+        )
 
     def _nearest_screen(self, point: QPoint) -> QScreen | None:
         """Return the screen whose bounds are closest to *point*."""
@@ -643,17 +666,29 @@ class PetWindow(QWidget):
     def _clamp_y(self, y: int) -> int:
         return max(self._min_pet_y(), min(y, self._max_pet_y()))
 
+    def _clamp_y_during_fall(self, y: int) -> int:
+        """Allow falling in from above the play area; only cap the bottom edge."""
+        return min(y, self._max_pet_y())
+
     def _clamp_position(self, x: int, y: int) -> tuple[int, int]:
         return self._clamp_x(x), self._clamp_y(y)
+
+    def _clamp_x_on_ledge(self, x: int, ledge: HorizontalLedge) -> int:
+        """Clamp *x* to both the screen and a horizontal ledge."""
+        return self._clamp_x(max(ledge.left, min(x, ledge.max_pet_x())))
 
     def _refresh_surfaces(self) -> None:
         self._refresh_play_area()
         self._surfaces.refresh(self._play_area, self._exclude_hwnds)
-        if not self._is_dragging:
+        if not self._is_dragging and self._fsm.state not in (
+            PetState.CLIMBING,
+            PetState.FALLING,
+        ):
             pos = self.pos()
             clamped_x, clamped_y = self._clamp_position(pos.x(), pos.y())
             if clamped_x != pos.x() or clamped_y != pos.y():
                 self.move(clamped_x, clamped_y)
+        if not self._is_dragging:
             self._sync_support()
 
     def _sync_support(self) -> None:
@@ -754,7 +789,8 @@ class PetWindow(QWidget):
             or self._chat_hold
         ):
             return
-        self._refresh_surfaces()
+        if self._fsm.state != PetState.FALLING:
+            self._refresh_surfaces()
         if self._fsm.state == PetState.WALKING:
             self._horizontal_walk_tick()
             self._handle_peer_interactions()
@@ -1038,7 +1074,7 @@ class PetWindow(QWidget):
             return
 
         pos = self.pos()
-        pet_x = climb.pet_x()
+        pet_x = self._clamp_x(climb.pet_x())
 
         if self._climb_direction < 0:
             new_y = max(pos.y() - get_effective_climb_speed_px(), self._min_pet_y())
@@ -1088,7 +1124,7 @@ class PetWindow(QWidget):
     def _start_climb(self, vertical: VerticalLedge, direction: int) -> None:
         self._climb_ledge = vertical
         self._climb_direction = -1 if direction < 0 else 1
-        self.move(vertical.pet_x(), self.pos().y())
+        self.move(self._clamp_x(vertical.pet_x()), self.pos().y())
         self._fsm.force_state(PetState.CLIMBING)
 
     def _start_fall(self) -> None:
@@ -1106,7 +1142,7 @@ class PetWindow(QWidget):
             return
         if self._fsm.state != PetState.FALLING:
             return
-        self._refresh_surfaces()
+        self._surfaces.refresh(self._play_area, self._exclude_hwnds)
         pos = self.pos()
         new_y = pos.y() + get_effective_gravity_px()
         next_feet_y = new_y + PET_HEIGHT - 1
@@ -1117,7 +1153,7 @@ class PetWindow(QWidget):
             exclude_ledge_id=self._fall_exclude_ledge_id,
         )
         if landing is not None:
-            land_x = self._clamp_x(pos.x())
+            land_x = self._clamp_x_on_ledge(pos.x(), landing)
             self.move(land_x, self._clamp_y(landing.stand_y))
             self._active_ledge = landing
             self._fall_exclude_ledge_id = None
@@ -1129,7 +1165,7 @@ class PetWindow(QWidget):
                 self.try_ambient_speech("land")
         elif next_feet_y >= self._play_area.bottom():
             floor = self._surfaces.floor_ledge(self._play_area)
-            land_x = self._clamp_x(pos.x())
+            land_x = self._clamp_x_on_ledge(pos.x(), floor)
             self.move(land_x, self._clamp_y(floor.stand_y))
             self._active_ledge = floor
             self._fall_exclude_ledge_id = None
@@ -1140,7 +1176,7 @@ class PetWindow(QWidget):
                 self._was_falling = False
                 self.try_ambient_speech("land")
         else:
-            self.move(self._clamp_x(pos.x()), self._clamp_y(new_y))
+            self.move(self._clamp_x(pos.x()), self._clamp_y_during_fall(new_y))
             if self._fall_exclude_ledge_id is not None:
                 excluded = next(
                     (

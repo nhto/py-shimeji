@@ -3,19 +3,38 @@
 Run from the project root:
 
     .venv\\Scripts\\python scripts\\test_outlook_com.py
+    .venv\\Scripts\\python scripts\\test_outlook_com.py --stores
 
 Requires classic Outlook (not "New Outlook" only) signed in to your account.
 """
 
 from __future__ import annotations
 
+import argparse
 import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 OL_FOLDER_INBOX = 6
 PR_SMTP_ADDRESS = "http://schemas.microsoft.com/mapi/proptag/0x39FE001E"
 
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Verify classic Outlook COM access.")
+    parser.add_argument(
+        "--stores",
+        action="store_true",
+        help="List every mailbox store in the Outlook profile.",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = _parse_args()
+
     if sys.platform != "win32":
         print("FAIL: Outlook COM is Windows-only.")
         return 1
@@ -66,7 +85,28 @@ def main() -> int:
     print(f"Address: {address}")
     if smtp:
         print(f"SMTP: {smtp}")
-    print(f"Unread inbox: {unread_count}")
+    print(f"Unread inbox (default): {unread_count}")
+
+    if args.stores:
+        try:
+            from outlook_com_client import OutlookComClient
+
+            client = OutlookComClient()
+            try:
+                stores = client.list_mail_stores()
+            finally:
+                client.close()
+        except Exception as exc:
+            print(f"WARN: Could not list mailbox stores ({type(exc).__name__}: {exc})")
+            return 0
+
+        if not stores:
+            print("Mailbox stores: (none)")
+        else:
+            print("Mailbox stores:")
+            for store in stores:
+                print(f"  - {store.display_name}")
+
     return 0
 
 

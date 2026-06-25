@@ -92,6 +92,41 @@ AZURE_TENANT_ID=organizations
 .venv\Scripts\python scripts\demo_outlook_com_client.py
 ```
 
+**Real-time mail (classic COM only):** when connected via **Classic Outlook desktop (COM)**, new mail can trigger pet bubbles via inbox `OnItemAdd` / `NewMailEx` events. **Mail polling still runs every 45s as a backup** — required when using the New Outlook UI, because COM events often do not fire there even though inbox reads work. If pets are hidden, notifications appear in the **system tray** instead.
+
+#### Classic vs New Outlook toggle
+
+| UI | COM read | COM real-time events | Graph API |
+|----|----------|----------------------|-----------|
+| **Classic Outlook** (`OUTLOOK.EXE`, toggle off) | Yes | Yes (with polling backup) | Yes (if configured) |
+| **New Outlook** (toggle on) | Often yes | Usually no — rely on polling | Yes (if IT allows) |
+
+To switch to classic: open Outlook → top-right **Try new Outlook** toggle → **off**. Or launch **Outlook** from Start (not “New Outlook”). Restart classic Outlook after switching.
+
+List every mailbox in your profile (shared mailboxes, delegated inboxes):
+
+```powershell
+.venv\Scripts\python scripts\test_outlook_com.py --stores
+```
+
+Enable **Include shared and additional mailboxes** in **Outlook settings...** to poll all of those inboxes (COM only).
+
+#### Notification settings
+
+In tray → **Outlook** → **Outlook settings...**:
+
+| Setting | Description |
+|---------|-------------|
+| **Notify pet** | Choose which pet shows speech bubbles, or **First visible pet** |
+| **Show notifications while pets are paused** | When off, paused pets use the tray balloon instead of bubbles |
+| **Include shared and additional mailboxes** | Poll every inbox in the Outlook profile (COM) |
+
+Outlook logging records **sender and subject only** — never full message bodies.
+
+#### Non-Windows
+
+Outlook tray menu items are **hidden on macOS and Linux**. Chat and pets work normally without Outlook.
+
 ## Run
 
 ```bash
@@ -177,6 +212,10 @@ py-shimeji/
 ├── outlook_graph_auth.py    # MSAL sign-in for Graph API
 ├── outlook_graph_client.py  # Microsoft Graph mail/calendar client
 ├── outlook_backend.py       # COM vs Graph backend factory
+├── outlook_poll_worker.py   # Background mail/calendar fetch
+├── outlook_com_events.py    # Real-time classic Outlook inbox COM events
+├── outlook_monitor.py       # Polling, dedup, pet notifications
+├── outlook_logging.py       # Safe log formatting (subject/sender only)
 ├── outlook_status.py        # Tray connection state + unread polling
 ├── outlook_settings_dialog.py  # Outlook connect status and toggles
 ├── py-shimeji.spec  # PyInstaller build spec
