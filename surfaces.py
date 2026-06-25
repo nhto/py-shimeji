@@ -43,9 +43,9 @@ class VerticalLedge:
 
     def pet_x(self) -> int:
         overlap = 6
-        if self.side == "left":
-            return self.edge_x - PET_WIDTH + overlap
-        return self.edge_x - overlap
+        # edge_x is Win32 RECT.right (exclusive) on the right; both sides hug the
+        # window edge with a small outward overlap.
+        return self.edge_x - PET_WIDTH + overlap
 
     def pet_overlaps_height(self, pet_top: int, pet_bottom: int) -> bool:
         margin = 8
