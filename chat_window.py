@@ -10,7 +10,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-from PyQt6.QtCore import QPoint, Qt, QThread, pyqtSignal
+from PyQt6.QtCore import QPoint, Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont, QGuiApplication, QMouseEvent
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -41,6 +41,9 @@ from config import (
     CHAT_SEND_LABELS,
     CHAT_STATUS_OFFLINE_LABELS,
     CHAT_STATUS_ONLINE_LABELS,
+    CHAT_STATUS_TYPING_LABELS,
+    CHAT_TYPING_INTERVAL_MS,
+    CHAT_TYPING_PHRASE_LABELS,
     CHAT_WINDOW_GAP_PX,
     CHAT_WINDOW_HEIGHT,
     CHAT_WINDOW_WIDTH,
@@ -53,6 +56,25 @@ from config import (
     has_openrouter_api_key,
     set_chat_language,
     set_chat_model,
+)
+from dialog_theme import (
+    CHAT_BUBU_BORDER,
+    CHAT_BUBU_BUBBLE_BG,
+    CHAT_BUBU_BUBBLE_FG,
+    CHAT_BUBU_LABEL_COLOR,
+    CHAT_BUBU_STREAMING_BORDER,
+    CHAT_TYPING_BUBBLE_BG,
+    CHAT_TYPING_BUBBLE_BORDER,
+    CHAT_TYPING_LABEL_COLOR,
+    CHAT_TYPING_TEXT_COLOR,
+    CHAT_USER_BORDER,
+    CHAT_USER_BUBBLE_BG,
+    CHAT_USER_BUBBLE_FG,
+    CHAT_USER_LABEL_COLOR,
+    STATUS_OFFLINE_COLOR,
+    STATUS_ONLINE_COLOR,
+    STATUS_TYPING_COLOR,
+    apply_light_chat_theme,
 )
 from pet_window import PetWindow
 
@@ -205,6 +227,11 @@ class ChatWindow(QWidget):
         self._streaming_reply = ""
         self._pending_image_data_url: str | None = None
         self._pending_image_name: str | None = None
+        self._busy = False
+        self._typing_phase = 0
+        self._typing_timer = QTimer(self)
+        self._typing_timer.setInterval(CHAT_TYPING_INTERVAL_MS)
+        self._typing_timer.timeout.connect(self._on_typing_tick)
         self._setup_window()
         self._build_ui()
         self._update_api_key_state()
@@ -235,10 +262,16 @@ class ChatWindow(QWidget):
         return cls._instance
 
     @classmethod
-    def refresh_api_key_state(cls) -> None:
-        """Update the open chat window after the API key changes."""
+    def refresh_preferences_state(cls) -> None:
+        """Update the open chat window after preferences change."""
         if cls._instance is not None:
+            cls._instance._sync_language_from_settings()
             cls._instance._update_api_key_state()
+
+    @classmethod
+    def refresh_api_key_state(cls) -> None:
+        """Backward-compatible alias for :meth:`refresh_preferences_state`."""
+        cls.refresh_preferences_state()
 
     def _set_pet(self, pet: PetWindow) -> None:
         if self._pet is pet:
@@ -279,148 +312,7 @@ class ChatWindow(QWidget):
         self.setWindowTitle("Chat with Bubu")
         self.setFixedSize(CHAT_WINDOW_WIDTH, CHAT_WINDOW_HEIGHT)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setStyleSheet(
-            """
-            QWidget#chatCard {
-                background-color: #1a1625;
-                border: 1px solid #3d3654;
-                border-radius: 20px;
-            }
-            QWidget#chatHeader {
-                background-color: #221e30;
-                border-top-left-radius: 20px;
-                border-top-right-radius: 20px;
-                border-bottom: 1px solid #3d3654;
-            }
-            QLabel#chatTitle {
-                color: #f8fafc;
-                font-size: 15px;
-                font-weight: 700;
-            }
-            QLabel#chatSubtitle {
-                color: #cbd5e1;
-                font-size: 11px;
-            }
-            QLabel#statusDot {
-                color: #4ade80;
-                font-size: 10px;
-            }
-            QPushButton#closeButton {
-                background-color: transparent;
-                color: #cbd5e1;
-                border: 1px solid #4b4563;
-                border-radius: 10px;
-                padding: 2px 8px;
-                font-size: 12px;
-            }
-            QPushButton#closeButton:hover {
-                background-color: #3d3654;
-                color: #f8fafc;
-            }
-            QTextEdit#transcript {
-                background-color: #14111c;
-                border: 1px solid #2e2940;
-                border-radius: 12px;
-                padding: 8px 6px;
-            }
-            QFrame#composer {
-                background-color: #221e30;
-                border: 1px solid #3d3654;
-                border-radius: 16px;
-            }
-            QLineEdit#messageInput {
-                background-color: #14111c;
-                border: 1px solid #4b4563;
-                border-radius: 12px;
-                padding: 10px 12px;
-                color: #f8fafc;
-                selection-background-color: #6366f1;
-            }
-            QLineEdit#messageInput:focus {
-                border-color: #818cf8;
-            }
-            QPushButton#sendButton {
-                background-color: #f97316;
-                color: #1c1510;
-                border: none;
-                border-radius: 12px;
-                padding: 10px 18px;
-                font-weight: 700;
-            }
-            QPushButton#sendButton:hover {
-                background-color: #fb923c;
-            }
-            QPushButton#sendButton:disabled {
-                background-color: #3d3654;
-                color: #94a3b8;
-            }
-            QPushButton#attachButton {
-                background-color: #2a2638;
-                color: #e2e8f0;
-                border: 1px solid #4b4563;
-                border-radius: 12px;
-                padding: 10px 12px;
-                font-size: 14px;
-            }
-            QPushButton#attachButton:hover {
-                border-color: #818cf8;
-                color: #f8fafc;
-            }
-            QPushButton#attachButton:disabled {
-                background-color: #221e30;
-                color: #64748b;
-                border-color: #3d3654;
-            }
-            QPushButton#attachButton[attached="true"] {
-                border-color: #f97316;
-                color: #fdba74;
-            }
-            QLabel#attachmentChip {
-                color: #fdba74;
-                font-size: 11px;
-            }
-            QPushButton#removeAttachmentButton {
-                background-color: transparent;
-                color: #cbd5e1;
-                border: 1px solid #4b4563;
-                border-radius: 8px;
-                padding: 0 6px;
-                font-size: 11px;
-            }
-            QPushButton#removeAttachmentButton:hover {
-                background-color: #3d3654;
-                color: #f8fafc;
-            }
-            QComboBox#modelPicker,
-            QComboBox#languagePicker {
-                background-color: #14111c;
-                color: #e2e8f0;
-                border: 1px solid #4b4563;
-                border-radius: 8px;
-                padding: 2px 8px;
-                font-size: 11px;
-                min-height: 22px;
-            }
-            QComboBox#modelPicker:hover,
-            QComboBox#languagePicker:hover {
-                border-color: #818cf8;
-                color: #f8fafc;
-            }
-            QComboBox#modelPicker::drop-down,
-            QComboBox#languagePicker::drop-down {
-                border: none;
-                width: 18px;
-            }
-            QComboBox#modelPicker QAbstractItemView,
-            QComboBox#languagePicker QAbstractItemView {
-                background-color: #221e30;
-                color: #f8fafc;
-                border: 1px solid #4b4563;
-                selection-background-color: #6366f1;
-                selection-color: #f8fafc;
-            }
-            """
-        )
+        apply_light_chat_theme(self)
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
@@ -443,7 +335,7 @@ class ChatWindow(QWidget):
         avatar.setFixedSize(36, 36)
         avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         avatar.setStyleSheet(
-            "background-color: #f97316; color: #1c1510; border-radius: 18px; font-weight: 700;"
+            "background-color: #f97316; color: #ffffff; border-radius: 18px; font-weight: 700;"
         )
 
         title_block = QVBoxLayout()
@@ -501,6 +393,12 @@ class ChatWindow(QWidget):
         header_layout.addLayout(title_block, stretch=1)
         header_layout.addWidget(close_button, alignment=Qt.AlignmentFlag.AlignTop)
         card_layout.addWidget(header)
+
+        self._loading_bar = QFrame()
+        self._loading_bar.setObjectName("loadingBar")
+        self._loading_bar.setFixedHeight(3)
+        self._loading_bar.setVisible(False)
+        card_layout.addWidget(self._loading_bar)
 
         body = QWidget()
         body_layout = QVBoxLayout(body)
@@ -602,7 +500,11 @@ class ChatWindow(QWidget):
                 )
             )
         if self._streaming_reply:
-            bubbles.append(self._build_bubble(self._streaming_reply, is_user=False))
+            bubbles.append(
+                self._build_bubble(self._streaming_reply, is_user=False, streaming=True)
+            )
+        elif self._busy:
+            bubbles.append(self._build_typing_bubble())
 
         self._transcript.setHtml("".join(bubbles))
         scrollbar = self._transcript.verticalScrollBar()
@@ -614,6 +516,7 @@ class ChatWindow(QWidget):
         *,
         is_user: bool,
         image_data_urls: list[str] | None = None,
+        streaming: bool = False,
     ) -> str:
         """Render a message bubble using table layout (Qt rich text lacks flex/inline-block)."""
         escaped = (
@@ -642,17 +545,19 @@ class ChatWindow(QWidget):
         if is_user:
             sender = "You"
             align = "right"
-            label_color = "#a5b4fc"
-            bubble_bg = "#4f46e5"
-            bubble_fg = "#ffffff"
-            border = "border:1px solid #6366f1;"
+            label_color = CHAT_USER_LABEL_COLOR
+            bubble_bg = CHAT_USER_BUBBLE_BG
+            bubble_fg = CHAT_USER_BUBBLE_FG
+            border = CHAT_USER_BORDER
         else:
             sender = "Bubu"
             align = "left"
-            label_color = "#fdba74"
-            bubble_bg = "#2a2638"
-            bubble_fg = "#f1f5f9"
-            border = "border:1px solid #4b4563;"
+            label_color = CHAT_BUBU_LABEL_COLOR
+            bubble_bg = CHAT_BUBU_BUBBLE_BG
+            bubble_fg = CHAT_BUBU_BUBBLE_FG
+            border = CHAT_BUBU_BORDER
+            if streaming:
+                border = CHAT_BUBU_STREAMING_BORDER
 
         return (
             f'<table width="100%" cellspacing="0" cellpadding="0" '
@@ -666,6 +571,61 @@ class ChatWindow(QWidget):
             f'line-height:1.55;">{body_html}</td></tr></table>'
             f'</td></tr></table>'
         )
+
+    def _build_typing_bubble(self) -> str:
+        """Animated thinking indicator shown before the first streamed token."""
+        phase = self._typing_phase % 3
+        dots: list[str] = []
+        for index in range(3):
+            active = index == phase
+            opacity = "1" if active else "0.22"
+            size = "11px" if active else "8px"
+            dots.append(
+                f'<span style="color:#f97316; opacity:{opacity}; font-size:{size};">'
+                f"●</span>"
+            )
+        dots_html = "&nbsp;".join(dots)
+        phrase = self._localized(CHAT_TYPING_PHRASE_LABELS)
+
+        return (
+            f'<table width="100%" cellspacing="0" cellpadding="0" '
+            f'style="margin-bottom:14px;">'
+            f'<tr><td align="left" style="padding:0 4px;">'
+            f'<span style="font-size:10px; font-weight:600; color:{CHAT_TYPING_LABEL_COLOR};">'
+            f"Bubu</span><br/>"
+            f'<table cellspacing="0" cellpadding="0" style="margin-top:4px;">'
+            f'<tr><td align="left" style="background-color:{CHAT_TYPING_BUBBLE_BG}; '
+            f"{CHAT_TYPING_BUBBLE_BORDER} padding:12px 16px;\">"
+            f'<span style="color:{CHAT_TYPING_TEXT_COLOR}; font-size:12px;">{phrase}</span> '
+            f"{dots_html}"
+            f"</td></tr></table>"
+            f"</td></tr></table>"
+        )
+
+    def _on_typing_tick(self) -> None:
+        self._typing_phase = (self._typing_phase + 1) % 4
+        pulse = (0.35, 0.55, 0.85, 0.55)[self._typing_phase]
+        self._loading_bar.setStyleSheet(
+            f"background-color: rgba(249, 115, 22, {pulse});"
+            " border: none; max-height: 3px; min-height: 3px;"
+        )
+        self._send_button.setText("." * ((self._typing_phase % 3) + 1))
+        self._render_transcript()
+
+    def _set_header_online_status(self) -> None:
+        """Restore the header status when not waiting on the model."""
+        if not has_openrouter_api_key():
+            self._status_subtitle.setText(
+                self._localized(CHAT_STATUS_OFFLINE_LABELS)
+            )
+            self._status_dot.setStyleSheet(f"color: {STATUS_OFFLINE_COLOR}; font-size: 10px;")
+            return
+        self._status_subtitle.setText(self._localized(CHAT_STATUS_ONLINE_LABELS))
+        self._status_dot.setStyleSheet(f"color: {STATUS_ONLINE_COLOR}; font-size: 10px;")
+
+    def _set_header_typing_status(self) -> None:
+        self._status_subtitle.setText(self._localized(CHAT_STATUS_TYPING_LABELS))
+        self._status_dot.setStyleSheet(f"color: {STATUS_TYPING_COLOR}; font-size: 10px;")
 
     def _on_model_changed(self, index: int) -> None:
         if index < 0:
@@ -688,6 +648,19 @@ class ChatWindow(QWidget):
         self._sync_system_prompt()
         self._update_input_labels()
 
+    def _sync_language_from_settings(self) -> None:
+        language = get_chat_language()
+        if language == self._language:
+            return
+        self._language = language
+        index = self._language_picker.findData(language)
+        if index >= 0:
+            self._language_picker.blockSignals(True)
+            self._language_picker.setCurrentIndex(index)
+            self._language_picker.blockSignals(False)
+        self._sync_system_prompt()
+        self._update_input_labels()
+
     def _sync_system_prompt(self) -> None:
         prompt = build_chat_system_prompt(self._language)
         if not self._history:
@@ -701,11 +674,17 @@ class ChatWindow(QWidget):
     def _update_api_key_state(self) -> None:
         """Reflect whether OpenRouter is configured in the header and composer."""
         configured = has_openrouter_api_key()
-        if configured:
+        if self._busy:
+            self._set_header_typing_status()
+        elif configured:
+            self._set_header_online_status()
+        else:
             self._status_subtitle.setText(
-                self._localized(CHAT_STATUS_ONLINE_LABELS)
+                self._localized(CHAT_STATUS_OFFLINE_LABELS)
             )
-            self._status_dot.setStyleSheet("color: #4ade80; font-size: 10px;")
+            self._status_dot.setStyleSheet(f"color: {STATUS_OFFLINE_COLOR}; font-size: 10px;")
+
+        if configured:
             self._input.setPlaceholderText(
                 CHAT_INPUT_PLACEHOLDERS.get(
                     self._language,
@@ -713,15 +692,11 @@ class ChatWindow(QWidget):
                 )
             )
         else:
-            self._status_subtitle.setText(
-                self._localized(CHAT_STATUS_OFFLINE_LABELS)
-            )
-            self._status_dot.setStyleSheet("color: #f87171; font-size: 10px;")
             self._input.setPlaceholderText(
                 self._localized(CHAT_NO_API_KEY_SEND_LABELS)
             )
 
-        enabled = configured and self._worker is None
+        enabled = configured and not self._busy
         self._input.setEnabled(enabled)
         self._send_button.setEnabled(enabled)
         self._attach_button.setEnabled(enabled)
@@ -784,18 +759,31 @@ class ChatWindow(QWidget):
         self._update_attach_button_state()
 
     def _set_busy(self, busy: bool) -> None:
+        self._busy = busy
         configured = has_openrouter_api_key()
         self._input.setEnabled(configured and not busy)
         self._send_button.setEnabled(configured and not busy)
         self._attach_button.setEnabled(configured and not busy)
         self._model_picker.setEnabled(configured and not busy)
         self._language_picker.setEnabled(True)
+        self._loading_bar.setVisible(busy)
+        self._send_button.setProperty("loading", busy)
+        self._send_button.style().unpolish(self._send_button)
+        self._send_button.style().polish(self._send_button)
+
         if busy:
-            self._send_button.setText("...")
+            self._typing_phase = 0
+            self._set_header_typing_status()
+            self._typing_timer.start()
+            self._on_typing_tick()
         else:
+            self._typing_timer.stop()
+            self._loading_bar.setStyleSheet("")
+            self._set_header_online_status()
             self._send_button.setText(
                 CHAT_SEND_LABELS.get(self._language, CHAT_SEND_LABELS["en"])
             )
+            self._render_transcript()
 
     def _send_message(self) -> None:
         if not has_openrouter_api_key():
@@ -844,6 +832,8 @@ class ChatWindow(QWidget):
         self._history.append(ChatMessage("assistant", reply))
         self._streaming_reply = ""
         self._append_bubu_message(reply)
+        if self._pet is not None:
+            self._pet.show_speech_bubble(reply)
         self._set_busy(False)
         self._input.setFocus()
 
@@ -868,6 +858,7 @@ class ChatWindow(QWidget):
         self._worker = None
 
     def closeEvent(self, event) -> None:  # noqa: N802
+        self._typing_timer.stop()
         if self._worker is not None and self._worker.isRunning():
             self._worker.requestInterruption()
             self._worker.wait(2000)

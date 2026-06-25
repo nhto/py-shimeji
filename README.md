@@ -9,6 +9,7 @@ The pet lives in a frameless, transparent, always-on-top window. It idles, walks
 - Python 3.10 or newer
 - PyQt6
 - An OpenRouter API key (optional — only needed for chat)
+- **Outlook integration (optional, Windows only):** classic Outlook desktop signed in to your account (see [Outlook COM feasibility](#outlook-com-feasibility-windows-only))
 
 ## Setup
 
@@ -42,11 +43,116 @@ OPENROUTER_API_KEY=sk-or-v1-...
 
 Keys saved from the tray menu are written to `.env` and take effect immediately — no restart needed.
 
+### Outlook integration
+
+| Mode | When to use |
+|------|-------------|
+| **Classic Outlook (COM)** | **Recommended** if your org blocks Graph (most work/school accounts) |
+| **Microsoft 365 / New Outlook (Graph)** | Only if you can register an Azure app **and** IT grants consent |
+
+#### No Microsoft Graph access?
+
+Many universities and companies **do not allow** personal/third-party apps to use Graph on work mailboxes. **New Outlook has no other API** — py-shimeji cannot read it without Graph.
+
+**Your workable option: switch to Classic Outlook + COM** (this already worked on your PC in Phase 0):
+
+1. **Turn off New Outlook** — in the New Outlook window, use the toggle at the top-right (*Try new Outlook* → switch off), **or** open **Outlook (classic)** from the Windows Start menu (not the “New” icon).
+2. Sign in to your work account in classic Outlook and wait for sync.
+3. In py-shimeji: tray → **Outlook** → **Outlook settings...** → **Classic Outlook desktop (COM)** → Save.
+4. Tray → **Outlook** → **Connect**.
+
+Verify with:
+
+```powershell
+.venv\Scripts\python scripts\test_outlook_com.py
+```
+
+You do **not** need `AZURE_CLIENT_ID` for this path.
+
+#### New Outlook / Graph (optional — needs IT)
+
+Only use this if your organization allows it:
+
+1. Register a **public client / native** app in [Azure Portal](https://portal.azure.com/) → Microsoft Entra ID → App registrations.
+2. Redirect URI: `http://localhost`
+3. API permissions: `User.Read`, `Mail.Read`, `Calendars.Read` (+ **admin consent** for work accounts)
+4. Add to `.env`:
+
+```env
+AZURE_CLIENT_ID=your-application-client-id
+AZURE_TENANT_ID=organizations
+```
+
+5. Tray → **Outlook** → settings → **Microsoft 365 / New Outlook (Graph API)** → **Connect** → browser sign-in.
+
+#### Classic Outlook (COM) reference
+
+```powershell
+.venv\Scripts\python scripts\test_outlook_com.py
+.venv\Scripts\python scripts\demo_outlook_com_client.py
+```
+
 ## Run
 
 ```bash
 python main.py
 ```
+
+## Build a standalone app (Windows)
+
+You can package py-shimeji into a folder you can zip and share — no Python install required on the recipient's machine.
+
+### Quick build
+
+**Git Bash / macOS / Linux:**
+
+```bash
+./scripts/build.sh
+```
+
+**PowerShell:**
+
+```powershell
+.\scripts\build.ps1
+```
+
+This creates `dist/py-shimeji/` with `py-shimeji.exe` and bundled dependencies. Zip that folder to share.
+
+> In Git Bash, use `./scripts/build.sh` — not `.\scripts\build.ps1` (backslashes are escape characters in bash).
+
+### Manual build
+
+```bash
+pip install -r requirements-dev.txt
+pyinstaller --noconfirm --clean py-shimeji.spec
+```
+
+On Windows, copy the env template next to the executable (the build script does this automatically):
+
+```powershell
+Copy-Item -Force .env.example dist\py-shimeji\.env.example
+```
+
+### Share the build
+
+1. Run the build (above).
+2. Zip the entire `dist\py-shimeji\` folder (~100 MB).
+3. Recipients unzip anywhere and run `py-shimeji.exe` — no Python install needed.
+4. Optional: rename `.env.example` to `.env` and add an OpenRouter key, or set the key from the tray menu after first launch.
+
+### After building
+
+| Item | Location when running the `.exe` |
+|------|----------------------------------|
+| Default sprites | Bundled inside the app |
+| `.env` (API key) | Next to `py-shimeji.exe` (created when you save a key from the tray) |
+| `.app_settings.json` | Next to `py-shimeji.exe` |
+| `.chat_settings.json` | Next to `py-shimeji.exe` |
+| Custom sprite folders | Any path you pick in the tray (unchanged) |
+
+A copy of `.env.example` is placed next to the executable so recipients can configure chat manually if they prefer.
+
+**Note:** Window climbing (walking on title bars) works on Windows only, same as the Python source build. The packaged app is built and tested for Windows.
 
 ## Project layout
 
@@ -60,13 +166,33 @@ py-shimeji/
 ├── display.py       # Monitor / taskbar geometry change handling
 ├── tray.py          # System tray icon and menu
 ├── chat_window.py   # Bubu chat panel (OpenRouter)
+├── speech_bubble.py # On-pet ambient / chat speech bubbles
 ├── api_key_dialog.py  # OpenRouter API key settings dialog
+├── behavior_settings_dialog.py  # Speed, chase, pet count, ambient speech
+├── dialog_theme.py  # Shared styling for dialogs and chat
+├── sprite_picker_dialog.py  # Visual sprite pack picker
+├── outlook_models.py        # MailItem / CalendarEvent dataclasses
+├── outlook_com_client.py    # Classic Outlook COM client (Windows)
+├── outlook_com_constants.py # MAPI folder/property constants
+├── outlook_graph_auth.py    # MSAL sign-in for Graph API
+├── outlook_graph_client.py  # Microsoft Graph mail/calendar client
+├── outlook_backend.py       # COM vs Graph backend factory
+├── outlook_status.py        # Tray connection state + unread polling
+├── outlook_settings_dialog.py  # Outlook connect status and toggles
+├── py-shimeji.spec  # PyInstaller build spec
+├── scripts/
+│   ├── build.sh               # One-command build (Git Bash / Unix)
+│   ├── build.ps1              # One-command build (PowerShell)
+│   ├── test_outlook_com.py    # Phase 0: Outlook COM feasibility check (Windows)
+│   └── demo_outlook_com_client.py  # Phase 1: inbox/calendar COM client demo
 ├── assets/
 │   └── sprites/
 │       ├── pet_1/   # PNG set for pet 1
 │       └── pet_2/   # PNG set for pet 2
+├── requirements.txt
+├── requirements-dev.txt  # PyInstaller and other build tools
 ├── .env.example     # Template for OPENROUTER_API_KEY
-└── requirements.txt
+└── README.md
 ```
 
 ## Sprites (optional)
@@ -107,11 +233,22 @@ You can also change a pet's sprites at runtime from the **system tray** menu: **
 - **Right-click** — open the tray menu at the pet
 - **Release on floor** — return to walking / idle
 - **Release in mid-air** — FALLING until the nearest ledge or floor
-- **System tray** — show/hide each pet, chat with Bubu, manage your OpenRouter API key, toggle click-through, change sprite folders, or quit
+- **System tray** — show/hide each pet, chat with Bubu, manage preferences and pet behavior, pause pets (reduce motion), toggle click-through, change sprite folders, or quit
+
+## Pet behavior settings
+
+Open **Pet behavior...** from the system tray to adjust:
+
+- **Movement speed** — walk, climb, and fall speed (50%–200%)
+- **Cursor chase chance** — how often idle pets walk toward your mouse
+- **Number of pets** — 1–4; extra pets appear immediately without restarting
+- **Ambient speech bubbles** — short random phrases while pets wander, plus reactions when they bump or land
+
+Settings are saved to `.app_settings.json` and take effect right away.
 
 ## Multiple pets
 
-By default the app spawns **two** desktop pets (`MAX_PETS` in `config.py`). They start at different positions along the taskbar edge, load sprites from `assets/sprites/pet_1/` and `assets/sprites/pet_2/`, and use distinct fallback colors when PNGs are missing (pink and teal). Each pet has its own behavior, physics, and drag handling. Pets can bump and nudge each other when walking on the same ledge.
+By default the app spawns **two** desktop pets. You can change the count (1–4) from **Pet behavior...** in the tray. They start at different positions along the taskbar edge, load sprites from `assets/sprites/pet_1/` and `assets/sprites/pet_2/` (and `pet_3` / `pet_4` when added), and use distinct fallback colors when PNGs are missing (pink and teal). Each pet has its own behavior, physics, and drag handling. Pets can bump and nudge each other when walking on the same ledge.
 
 ## Behavior
 
@@ -123,7 +260,7 @@ By default the app spawns **two** desktop pets (`MAX_PETS` in `config.py`). They
 - **FALLING** — gravity until the nearest ledge or floor (`QScreen.availableGeometry()` respects taskbar/dock)
 - **DRAGGED** — user-controlled; normal animation pauses while held
 
-Cursor chase tuning constants (`CURSOR_CHASE_CHANCE`, `CURSOR_SIT_DISTANCE_PX`, etc.) live in `config.py`.
+Cursor chase tuning constants live in `config.py` and can be adjusted from **Pet behavior...** in the tray.
 
 ## Chat with Bubu
 
@@ -139,3 +276,9 @@ If no API key is configured:
 ## Click-through
 
 Enable **Click-through (pass mouse clicks)** from the system tray when you want pets visible but not in the way — mouse clicks pass through to apps below. Turn it off again before dragging a pet.
+
+## Pause pets (reduce motion)
+
+Enable **Pause pets (reduce motion)** from the system tray when you want pets visible but still — useful for meetings, screen sharing, or accessibility. Pets snap to the nearest ledge or floor, stop walking and animating, and stay in a sit pose. The setting is remembered across restarts.
+
+You can still drag pets while paused if click-through is off. Turn pause off to resume normal behavior.

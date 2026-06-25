@@ -15,6 +15,7 @@ from PyQt6.QtGui import (
     QContextMenuEvent,
     QCursor,
     QGuiApplication,
+    QHideEvent,
     QImage,
     QMouseEvent,
     QPaintEvent,
@@ -30,16 +31,12 @@ from PyQt6.QtWidgets import QWidget
 from config import (
     ANIMATION_INTERVAL_MS,
     BEHAVIOR_INTERVAL_MS,
-    CLIMB_SPEED_PX,
-    CURSOR_CHASE_CHANCE,
     CURSOR_CHASE_MAX_MS,
     CURSOR_CHASE_MIN_MS,
     CURSOR_SIT_DISTANCE_PX,
     CURSOR_STILL_MS,
     CURSOR_STILL_TOLERANCE_PX,
     CURSOR_Y_TOLERANCE_PX,
-    FALL_TICK_MS,
-    GRAVITY_PX,
     PEER_INTERACTION_Y_TOLERANCE_PX,
     PEER_NUDGE_PX,
     PEER_SIT_ON_BUMP_CHANCE,
@@ -49,9 +46,20 @@ from config import (
     SPRITE_FILES,
     SURFACE_REFRESH_MS,
     TOP_PERCH_MARGIN_PX,
-    WALK_SPEED_PX,
-    get_pet_sprites_dir,
+    format_speech_bubble_text,
+    get_ambient_phrase,
+    get_ambient_speech_enabled,
+    get_cursor_chase_chance,
+    get_effective_climb_speed_px,
+    get_effective_gravity_px,
+    get_effective_walk_speed_px,
+    get_move_tick_ms,
+    set_saved_pet_sprites_dir,
+    AMBIENT_SPEECH_EVENT_CHANCE,
+    AMBIENT_SPEECH_INTERVAL_MAX_MS,
+    AMBIENT_SPEECH_INTERVAL_MIN_MS,
 )
+from speech_bubble import SpeechBubbleWindow
 from states import PetState, PetStateMachine
 from surfaces import HorizontalLedge, SurfaceTracker, VerticalLedge
 
@@ -226,6 +234,7 @@ class PetWindow(QWidget):
         self._climb_ledge: VerticalLedge | None = None
         self._climb_direction: int = -1  # -1 = up, 1 = down
         self._click_through: bool = False
+        self._motion_paused: bool = False
         self._context_menu_handler: Callable[[QPoint, PetWindow], None] | None = None
         self._right_click_handled: bool = False
         self._peer_pets: list[PetWindow] = []
@@ -236,12 +245,18 @@ class PetWindow(QWidget):
         self._last_cursor_pos: QPoint | None = None
         self._cursor_chase_ms_left: int = 0
         self._idle_chase_accum_ms: int = 0
+        self._speech_bubble: SpeechBubbleWindow | None = None
+        self._was_falling: bool = False
 
         self._fsm = PetStateMachine(self._on_fsm_state_changed, parent=self)
 
         self._setup_window()
         self._setup_timers()
         self._place_on_floor()
+
+    @property
+    def pet_index(self) -> int:
+        return self._pet_index
 
     @property
     def sprites_dir(self) -> Path:
@@ -255,6 +270,10 @@ class PetWindow(QWidget):
     def click_through(self) -> bool:
         return self._click_through
 
+    @property
+    def motion_paused(self) -> bool:
+        return self._motion_paused
+
     def set_context_menu_handler(
         self, handler: Callable[[QPoint, PetWindow], None] | None
     ) -> None:
@@ -265,16 +284,90 @@ class PetWindow(QWidget):
         self._click_through = enabled
         self._apply_click_through()
 
+    def set_motion_paused(self, enabled: bool) -> None:
+        """Freeze autonomous movement and animation (accessibility / meetings)."""
+        if enabled == self._motion_paused:
+            return
+        self._motion_paused = enabled
+        if enabled:
+            self._enter_motion_pause()
+        else:
+            self._leave_motion_pause()
+
     def reload_sprites(self, sprites_dir: Path) -> None:
         """Load a new PNG set for this pet and refresh the window."""
         self._sprites_dir = sprites_dir
         self._sprites.reload(sprites_dir)
         self._frame_index = 0
+        set_saved_pet_sprites_dir(self._pet_index, sprites_dir)
         self.update()
+
+    def show_speech_bubble(self, text: str) -> None:
+        """Show a short-lived speech bubble above the pet."""
+        bubble_text = format_speech_bubble_text(text)
+        if bubble_text is None or not self.isVisible():
+            return
+        if self._speech_bubble is None:
+            self._speech_bubble = SpeechBubbleWindow(self)
+        self._speech_bubble.show_text(bubble_text)
+
+    def _reposition_speech_bubble(self) -> None:
+        if self._speech_bubble is not None and self._speech_bubble.isVisible():
+            self._speech_bubble.reposition()
+
+    def _hide_speech_bubble(self) -> None:
+        if self._speech_bubble is not None:
+            self._speech_bubble.hide()
+
+    def move(self, *args) -> None:  # noqa: ANN002
+        super().move(*args)
+        self._reposition_speech_bubble()
+
+    def hideEvent(self, event: QHideEvent) -> None:  # noqa: N802
+        self._hide_speech_bubble()
+        super().hideEvent(event)
 
     def set_peer_pets(self, peers: list[PetWindow]) -> None:
         """Register other pets for overlap detection and nudging."""
         self._peer_pets = peers
+
+    def set_total_pet_count(self, total: int) -> None:
+        """Update spacing metadata when pets are added or removed."""
+        self._pet_count = max(1, total)
+
+    def apply_behavior_settings(self) -> None:
+        """Apply movement speed and ambient-speech settings from config."""
+        interval = get_move_tick_ms()
+        self._fall_timer.setInterval(interval)
+        self._move_timer.setInterval(interval)
+        if get_ambient_speech_enabled():
+            self._schedule_ambient_speech()
+        else:
+            self._ambient_timer.stop()
+
+    def try_ambient_speech(self, event: str | None = None) -> None:
+        """Show a short ambient phrase when appropriate."""
+        if not get_ambient_speech_enabled():
+            return
+        if not self.isVisible() or self._motion_paused or self._menu_hold or self._chat_hold:
+            return
+        if self._is_dragging or self._fsm.state in (
+            PetState.DRAGGED,
+            PetState.FALLING,
+            PetState.CLIMBING,
+        ):
+            return
+        if self._speech_bubble is not None and self._speech_bubble.isVisible():
+            return
+        if event is None:
+            if self._fsm.state not in (PetState.IDLE, PetState.SIT, PetState.WALKING):
+                return
+        elif random.random() >= AMBIENT_SPEECH_EVENT_CHANCE:
+            return
+
+        phrase = get_ambient_phrase(event)
+        if phrase is not None:
+            self.show_speech_bubble(phrase)
 
     def handle_display_changed(self) -> None:
         """Re-clamp position and refresh surfaces after monitor or taskbar changes."""
@@ -289,6 +382,9 @@ class PetWindow(QWidget):
 
         self._surfaces.refresh(self._play_area, self._exclude_hwnds)
         if self._is_dragging:
+            return
+        if self._motion_paused:
+            self._snap_to_nearest_support()
             return
         if self._fsm.state in (PetState.FALLING, PetState.CLIMBING):
             return
@@ -341,10 +437,65 @@ class PetWindow(QWidget):
         self.update()
 
     def _leave_hold_if_idle(self) -> None:
+        if self._menu_hold or self._chat_hold or self._motion_paused:
+            return
+        self._fsm.resume()
+        self._anim_timer.start()
+        self._move_timer.start()
+        self.update()
+
+    def _enter_motion_pause(self) -> None:
+        """Stop movement and sit still; dragging remains available."""
+        self._hide_speech_bubble()
+        self._fall_timer.stop()
+        self._anim_timer.stop()
+        self._move_timer.stop()
+
+        if self._is_dragging:
+            return
+
+        self._cursor_sit_active = False
+        self._cursor_still_ms = 0
+        self._cursor_chase_ms_left = 0
+        self._climb_ledge = None
+        self._idle_chase_accum_ms = 0
+        self._snap_to_nearest_support()
+        self._fsm.pause()
+        self._fsm.begin_sit()
+        self._frame_index = 0
+        self.update()
+
+    def _leave_motion_pause(self) -> None:
         if self._menu_hold or self._chat_hold:
             return
         self._fsm.resume()
         self._anim_timer.start()
+        self._move_timer.start()
+        self.update()
+
+    def _snap_to_nearest_support(self) -> None:
+        """Move the pet onto the current ledge or the screen floor."""
+        self._refresh_play_area()
+        self._refresh_surfaces()
+        pos = self.pos()
+        ledge = self._surfaces.find_ledge_at(pos.x(), pos.y())
+        if ledge is None:
+            floor = self._surfaces.floor_ledge(self._play_area)
+            self._active_ledge = floor
+            self.move(self._clamp_x(pos.x()), self._clamp_y(floor.stand_y))
+            return
+        self._active_ledge = ledge
+        self.move(self._clamp_x(pos.x()), self._clamp_y(ledge.stand_y))
+
+    def _finish_drag_while_paused(self) -> None:
+        """Land after a manual drag while reduce-motion pause is active."""
+        self._snap_to_nearest_support()
+        self._fsm.pause()
+        self._fsm.begin_sit()
+        self._frame_index = 0
+        self._fall_timer.stop()
+        self._anim_timer.stop()
+        self._move_timer.stop()
         self.update()
 
     def apply_peer_nudge(self, dx: int) -> None:
@@ -384,11 +535,11 @@ class PetWindow(QWidget):
         self._anim_timer.start()
 
         self._fall_timer = QTimer(self)
-        self._fall_timer.setInterval(FALL_TICK_MS)
+        self._fall_timer.setInterval(get_move_tick_ms())
         self._fall_timer.timeout.connect(self._on_fall_tick)
 
         self._move_timer = QTimer(self)
-        self._move_timer.setInterval(FALL_TICK_MS)
+        self._move_timer.setInterval(get_move_tick_ms())
         self._move_timer.timeout.connect(self._on_movement_tick)
         self._move_timer.start()
 
@@ -396,6 +547,24 @@ class PetWindow(QWidget):
         self._surface_timer.setInterval(SURFACE_REFRESH_MS)
         self._surface_timer.timeout.connect(self._refresh_surfaces)
         self._surface_timer.start()
+
+        self._ambient_timer = QTimer(self)
+        self._ambient_timer.setSingleShot(True)
+        self._ambient_timer.timeout.connect(self._on_ambient_timer)
+        self._schedule_ambient_speech()
+
+    def _schedule_ambient_speech(self) -> None:
+        if not get_ambient_speech_enabled():
+            return
+        delay = random.randint(
+            AMBIENT_SPEECH_INTERVAL_MIN_MS,
+            AMBIENT_SPEECH_INTERVAL_MAX_MS,
+        )
+        self._ambient_timer.start(delay)
+
+    def _on_ambient_timer(self) -> None:
+        self.try_ambient_speech()
+        self._schedule_ambient_speech()
 
     def _place_on_floor(self) -> None:
         self._refresh_play_area()
@@ -565,7 +734,12 @@ class PetWindow(QWidget):
     # ------------------------------------------------------------------
 
     def _on_animation_tick(self) -> None:
-        if self._menu_hold or self._chat_hold or self._fsm.state == PetState.DRAGGED:
+        if (
+            self._motion_paused
+            or self._menu_hold
+            or self._chat_hold
+            or self._fsm.state == PetState.DRAGGED
+        ):
             return
         frames = self._sprites.frames_for_state(self._fsm.state)
         if frames:
@@ -573,7 +747,12 @@ class PetWindow(QWidget):
         self.update()
 
     def _on_movement_tick(self) -> None:
-        if self._is_dragging or self._menu_hold or self._chat_hold:
+        if (
+            self._is_dragging
+            or self._motion_paused
+            or self._menu_hold
+            or self._chat_hold
+        ):
             return
         self._refresh_surfaces()
         if self._fsm.state == PetState.WALKING:
@@ -585,7 +764,7 @@ class PetWindow(QWidget):
         elif self._fsm.state == PetState.CLIMBING:
             self._climb_tick()
         elif self._fsm.state == PetState.IDLE:
-            self._idle_chase_accum_ms += FALL_TICK_MS
+            self._idle_chase_accum_ms += get_move_tick_ms()
             if self._idle_chase_accum_ms >= BEHAVIOR_INTERVAL_MS:
                 self._idle_chase_accum_ms = 0
                 self._maybe_start_cursor_chase()
@@ -598,7 +777,7 @@ class PetWindow(QWidget):
     def _move_on_ledge(self, direction: int, *, allow_climb: bool) -> None:
         pos = self.pos()
         direction = self._fsm.direction
-        new_x = pos.x() + WALK_SPEED_PX * direction
+        new_x = pos.x() + get_effective_walk_speed_px() * direction
         pet_top = pos.y()
         pet_bottom = pos.y() + PET_HEIGHT
 
@@ -679,7 +858,7 @@ class PetWindow(QWidget):
         self.move(new_x, self._clamp_y(ledge.stand_y))
 
     def _maybe_start_cursor_chase(self) -> None:
-        if not self.isVisible() or random.random() >= CURSOR_CHASE_CHANCE:
+        if not self.isVisible() or random.random() >= get_cursor_chase_chance():
             return
         cursor = QCursor.pos()
         if not self._is_cursor_on_same_ledge(cursor):
@@ -696,7 +875,7 @@ class PetWindow(QWidget):
         self._fsm.begin_cursor_chase()
 
     def _cursor_chase_tick(self) -> None:
-        self._cursor_chase_ms_left -= FALL_TICK_MS
+        self._cursor_chase_ms_left -= get_move_tick_ms()
         if self._cursor_chase_ms_left <= 0:
             self._end_cursor_chase()
             return
@@ -773,7 +952,7 @@ class PetWindow(QWidget):
                 moved_x <= CURSOR_STILL_TOLERANCE_PX
                 and moved_y <= CURSOR_STILL_TOLERANCE_PX
             ):
-                self._cursor_still_ms += FALL_TICK_MS
+                self._cursor_still_ms += get_move_tick_ms()
             else:
                 self._cursor_still_ms = 0
         self._last_cursor_pos = cursor
@@ -834,6 +1013,7 @@ class PetWindow(QWidget):
 
             self._nudge_on_ledge(nudge)
             peer.apply_peer_nudge(-nudge)
+            self.try_ambient_speech("bump")
             self._fsm.flip_direction()
             if self._fsm.state == PetState.CHASING_CURSOR:
                 self._end_cursor_chase()
@@ -861,7 +1041,7 @@ class PetWindow(QWidget):
         pet_x = climb.pet_x()
 
         if self._climb_direction < 0:
-            new_y = max(pos.y() - CLIMB_SPEED_PX, self._min_pet_y())
+            new_y = max(pos.y() - get_effective_climb_speed_px(), self._min_pet_y())
             climb_top = max(climb.top, self._play_area.top())
             if new_y <= climb_top - PET_HEIGHT + 8:
                 top_ledge = self._horizontal_ledge_for_hwnd(climb.hwnd)
@@ -886,7 +1066,7 @@ class PetWindow(QWidget):
                 self.move(pet_x, new_y)
             return
 
-        new_y = pos.y() + CLIMB_SPEED_PX
+        new_y = pos.y() + get_effective_climb_speed_px()
         if new_y + PET_HEIGHT >= climb.bottom - 4:
             floor = self._surfaces.floor_ledge(self._play_area)
             self._active_ledge = floor
@@ -912,6 +1092,7 @@ class PetWindow(QWidget):
         self._fsm.force_state(PetState.CLIMBING)
 
     def _start_fall(self) -> None:
+        self._was_falling = True
         self._fall_exclude_ledge_id = (
             self._active_ledge.ledge_id if self._active_ledge is not None else None
         )
@@ -920,11 +1101,14 @@ class PetWindow(QWidget):
         self._fsm.force_state(PetState.FALLING)
 
     def _on_fall_tick(self) -> None:
+        if self._motion_paused:
+            self._enter_motion_pause()
+            return
         if self._fsm.state != PetState.FALLING:
             return
         self._refresh_surfaces()
         pos = self.pos()
-        new_y = pos.y() + GRAVITY_PX
+        new_y = pos.y() + get_effective_gravity_px()
         next_feet_y = new_y + PET_HEIGHT - 1
         landing = self._surfaces.find_landing_ledge(
             pos.x(),
@@ -940,6 +1124,9 @@ class PetWindow(QWidget):
             self._fall_timer.stop()
             self._fsm.resume()
             self._fsm.begin_walking()
+            if self._was_falling:
+                self._was_falling = False
+                self.try_ambient_speech("land")
         elif next_feet_y >= self._play_area.bottom():
             floor = self._surfaces.floor_ledge(self._play_area)
             land_x = self._clamp_x(pos.x())
@@ -949,6 +1136,9 @@ class PetWindow(QWidget):
             self._fall_timer.stop()
             self._fsm.resume()
             self._fsm.begin_walking()
+            if self._was_falling:
+                self._was_falling = False
+                self.try_ambient_speech("land")
         else:
             self.move(self._clamp_x(pos.x()), self._clamp_y(new_y))
             if self._fall_exclude_ledge_id is not None:
@@ -1021,6 +1211,10 @@ class PetWindow(QWidget):
         if event.button() != Qt.MouseButton.LeftButton or not self._is_dragging:
             return
         self._is_dragging = False
+        if self._motion_paused:
+            self._finish_drag_while_paused()
+            event.accept()
+            return
         self._fsm.resume()
         if self._is_on_support():
             ledge = self._surfaces.find_ledge_at(self.pos().x(), self.pos().y())
