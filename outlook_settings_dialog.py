@@ -21,6 +21,8 @@ from config import (
     OUTLOOK_DIALOG_CANCEL_LABELS,
     OUTLOOK_DIALOG_INTRO_LABELS,
     OUTLOOK_DIALOG_MAIL_HINT_LABELS,
+    OUTLOOK_DIALOG_MAIL_EVENTS_HINT_LABELS,
+    OUTLOOK_DIALOG_MAIL_EVENTS_LABELS,
     OUTLOOK_DIALOG_MAIL_LABELS,
     OUTLOOK_DIALOG_SAVE_LABELS,
     OUTLOOK_DIALOG_SOURCE_COM_HINT_LABELS,
@@ -44,6 +46,7 @@ from config import (
     get_chat_language,
     get_outlook_calendar_enabled,
     get_outlook_mail_enabled,
+    get_outlook_mail_events_enabled,
     get_outlook_source,
     localized,
     outlook_com_supported,
@@ -66,10 +69,12 @@ class OutlookSettingsDialog(QDialog):
         pet: PetWindow | None = None,
         *,
         outlook_status: OutlookStatusManager | None = None,
+        outlook_monitor: object | None = None,
     ) -> None:
         super().__init__(parent)
         self._pet = pet
         self._outlook_status = outlook_status
+        self._outlook_monitor = outlook_monitor
         self._positioned = False
         self._ui_language = get_chat_language()
         self._setup_window()
@@ -163,6 +168,13 @@ class OutlookSettingsDialog(QDialog):
         self._mail_hint.setWordWrap(True)
         layout.addWidget(self._mail_hint)
 
+        self._mail_events_checkbox = QCheckBox()
+        layout.addWidget(self._mail_events_checkbox)
+        self._mail_events_hint = QLabel()
+        self._mail_events_hint.setStyleSheet(DIALOG_HINT_STYLE)
+        self._mail_events_hint.setWordWrap(True)
+        layout.addWidget(self._mail_events_hint)
+
         self._calendar_checkbox = QCheckBox()
         layout.addWidget(self._calendar_checkbox)
         self._calendar_hint = QLabel()
@@ -191,8 +203,10 @@ class OutlookSettingsDialog(QDialog):
             if com_index >= 0:
                 self._source_picker.setCurrentIndex(com_index)
         self._mail_checkbox.setChecked(get_outlook_mail_enabled())
+        self._mail_events_checkbox.setChecked(get_outlook_mail_events_enabled())
         self._calendar_checkbox.setChecked(get_outlook_calendar_enabled())
         self._update_source_hint()
+        self._update_mail_events_visibility()
 
     def _selected_source(self) -> str:
         value = self._source_picker.currentData()
@@ -202,7 +216,13 @@ class OutlookSettingsDialog(QDialog):
 
     def _on_source_changed(self) -> None:
         self._update_source_hint()
+        self._update_mail_events_visibility()
         self._refresh_status()
+
+    def _update_mail_events_visibility(self) -> None:
+        show = self._selected_source() == OUTLOOK_SOURCE_COM
+        self._mail_events_checkbox.setVisible(show)
+        self._mail_events_hint.setVisible(show)
 
     def _update_source_hint(self) -> None:
         language = self._ui_language
@@ -229,6 +249,12 @@ class OutlookSettingsDialog(QDialog):
         self._test_button.setText(localized(OUTLOOK_DIALOG_TEST_LABELS, language))
         self._mail_checkbox.setText(localized(OUTLOOK_DIALOG_MAIL_LABELS, language))
         self._mail_hint.setText(localized(OUTLOOK_DIALOG_MAIL_HINT_LABELS, language))
+        self._mail_events_checkbox.setText(
+            localized(OUTLOOK_DIALOG_MAIL_EVENTS_LABELS, language)
+        )
+        self._mail_events_hint.setText(
+            localized(OUTLOOK_DIALOG_MAIL_EVENTS_HINT_LABELS, language)
+        )
         self._calendar_checkbox.setText(localized(OUTLOOK_DIALOG_CALENDAR_LABELS, language))
         self._calendar_hint.setText(localized(OUTLOOK_DIALOG_CALENDAR_HINT_LABELS, language))
         if self._save_button is not None:
@@ -309,13 +335,23 @@ class OutlookSettingsDialog(QDialog):
             client.close()
 
     def _save_settings(self) -> None:
+        source = self._selected_source()
         set_outlook_settings(
-            source=self._selected_source(),
+            source=source,
             mail_enabled=self._mail_checkbox.isChecked(),
+            mail_events_enabled=(
+                self._mail_events_checkbox.isChecked()
+                if source == OUTLOOK_SOURCE_COM
+                else None
+            ),
             calendar_enabled=self._calendar_checkbox.isChecked(),
         )
         if self._outlook_status is not None:
             self._outlook_status.reload_backend()
+        if self._outlook_monitor is not None:
+            restart = getattr(self._outlook_monitor, "restart_mail_delivery", None)
+            if callable(restart):
+                restart()
         self.accept()
 
 
@@ -324,12 +360,18 @@ def open_outlook_settings_dialog(
     pet: PetWindow | None = None,
     *,
     outlook_status: OutlookStatusManager | None = None,
+    outlook_monitor: object | None = None,
 ) -> OutlookSettingsDialog | None:
     """Show the Outlook settings dialog. Returns the dialog when saved."""
     if pet is not None:
         pet.begin_menu_hold()
     try:
-        dialog = OutlookSettingsDialog(parent, pet, outlook_status=outlook_status)
+        dialog = OutlookSettingsDialog(
+            parent,
+            pet,
+            outlook_status=outlook_status,
+            outlook_monitor=outlook_monitor,
+        )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return None
         return dialog

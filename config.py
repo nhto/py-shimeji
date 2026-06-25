@@ -772,9 +772,21 @@ OUTLOOK_DIALOG_CALENDAR_LABELS: dict[str, str] = {
 }
 
 OUTLOOK_DIALOG_MAIL_HINT_LABELS: dict[str, str] = {
-    "en": "When enabled, new unread mail can trigger pet alerts in a later phase.",
-    "zh-Hans": "启用后，未读邮件可在后续阶段触发宠物提醒。",
-    "zh-Hant": "啟用後，未讀郵件可在後續階段觸發寵物提醒。",
+    "en": "When enabled, new unread mail can trigger pet alerts.",
+    "zh-Hans": "启用后，未读邮件可触发宠物提醒。",
+    "zh-Hant": "啟用後，未讀郵件可觸發寵物提醒。",
+}
+
+OUTLOOK_DIALOG_MAIL_EVENTS_LABELS: dict[str, str] = {
+    "en": "Real-time mail (classic Outlook COM)",
+    "zh-Hans": "实时邮件（经典 Outlook COM）",
+    "zh-Hant": "即時郵件（傳統 Outlook COM）",
+}
+
+OUTLOOK_DIALOG_MAIL_EVENTS_HINT_LABELS: dict[str, str] = {
+    "en": "Instant inbox alerts via COM events. Falls back to polling if unavailable.",
+    "zh-Hans": "通过 COM 事件即时提醒；不可用时回退到轮询。",
+    "zh-Hant": "透過 COM 事件即時提醒；不可用時回退到輪詢。",
 }
 
 OUTLOOK_DIALOG_CALENDAR_HINT_LABELS: dict[str, str] = {
@@ -1508,6 +1520,7 @@ def get_outlook_settings() -> dict:
         "enabled": bool(raw.get("enabled", enabled_default)),
         "source": get_outlook_source(),
         "mail_enabled": bool(raw.get("mail_enabled", True)),
+        "mail_events_enabled": bool(raw.get("mail_events_enabled", True)),
         "calendar_enabled": bool(raw.get("calendar_enabled", True)),
         "mail_poll_interval_sec": _clamp_int(
             raw.get("mail_poll_interval_sec"),
@@ -1537,6 +1550,13 @@ def get_outlook_enabled() -> bool:
 
 def get_outlook_mail_enabled() -> bool:
     return bool(get_outlook_settings()["mail_enabled"])
+
+
+def get_outlook_mail_events_enabled() -> bool:
+    """Real-time inbox events are classic COM only."""
+    if get_outlook_source() != OUTLOOK_SOURCE_COM:
+        return False
+    return bool(get_outlook_settings()["mail_events_enabled"])
 
 
 def get_outlook_calendar_enabled() -> bool:
@@ -1582,6 +1602,10 @@ def set_outlook_mail_enabled(enabled: bool) -> None:
     _save_outlook_partial({"mail_enabled": bool(enabled)})
 
 
+def set_outlook_mail_events_enabled(enabled: bool) -> None:
+    _save_outlook_partial({"mail_events_enabled": bool(enabled)})
+
+
 def set_outlook_calendar_enabled(enabled: bool) -> None:
     _save_outlook_partial({"calendar_enabled": bool(enabled)})
 
@@ -1590,6 +1614,7 @@ def set_outlook_settings(
     *,
     source: str | None = None,
     mail_enabled: bool | None = None,
+    mail_events_enabled: bool | None = None,
     calendar_enabled: bool | None = None,
     mail_poll_interval_sec: int | None = None,
     calendar_poll_interval_sec: int | None = None,
@@ -1603,6 +1628,8 @@ def set_outlook_settings(
             updates["source"] = normalized
     if mail_enabled is not None:
         updates["mail_enabled"] = bool(mail_enabled)
+    if mail_events_enabled is not None:
+        updates["mail_events_enabled"] = bool(mail_events_enabled)
     if calendar_enabled is not None:
         updates["calendar_enabled"] = bool(calendar_enabled)
     if mail_poll_interval_sec is not None:

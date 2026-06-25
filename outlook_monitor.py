@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from datetime import datetime
 from typing import Callable
 
@@ -13,6 +14,7 @@ from config import (
     get_outlook_calendar_poll_interval_sec,
     get_outlook_enabled,
     get_outlook_mail_enabled,
+    get_outlook_mail_events_enabled,
     get_outlook_mail_poll_interval_sec,
     get_outlook_meeting_reminder_minutes,
     get_outlook_reminded_events,
@@ -69,6 +71,7 @@ class OutlookMonitor(QObject):
         self._worker: OutlookPollWorker | None = None
         self._pending_poll_mail = False
         self._pending_poll_calendar = False
+        self._mail_events: QObject | None = None
 
         self._mail_timer = QTimer(self)
         self._mail_timer.timeout.connect(self._poll_mail)
@@ -81,6 +84,13 @@ class OutlookMonitor(QObject):
     def set_tray_notifier(self, notifier: TrayNotifier | None) -> None:
         self._tray_notifier = notifier
 
+    @property
+    def mail_events_active(self) -> bool:
+        if self._mail_events is None:
+            return False
+        is_active = getattr(self._mail_events, "is_active", False)
+        return bool(is_active() if callable(is_active) else is_active)
+
     def start(self) -> None:
         """Begin polling when Outlook integration is enabled."""
         if self._running or not get_outlook_enabled():
@@ -88,19 +98,28 @@ class OutlookMonitor(QObject):
         self._running = True
         self._mail_baseline_pending = True
         self._restart_timers()
-        self._poll_mail()
         self._poll_calendar()
+        self._poll_mail()
 
     def stop(self) -> None:
         """Stop polling without clearing Outlook settings."""
         self._running = False
         self._mail_timer.stop()
         self._calendar_timer.stop()
+        self._stop_mail_events()
         self._cancel_worker()
 
     def shutdown(self) -> None:
         """Release resources on application exit."""
         self.stop()
+
+    def restart_mail_delivery(self) -> None:
+        """Restart mail events/polling after settings change."""
+        if not self._running:
+            return
+        self._stop_mail_events()
+        self._start_mail_events()
+        self._restart_timers()
 
     def _restart_timers(self) -> None:
         mail_ms = max(1, get_outlook_mail_poll_interval_sec()) * 1000
@@ -143,19 +162,40 @@ class OutlookMonitor(QObject):
         self._worker.finished.connect(self._on_worker_finished)
         self._worker.start()
 
+    def _disconnect_worker(self, worker: OutlookPollWorker) -> None:
+        for signal, slot in (
+            (worker.poll_complete, self._on_poll_complete),
+            (worker.poll_failed, self._on_poll_failed),
+            (worker.finished, self._on_worker_finished),
+        ):
+            try:
+                signal.disconnect(slot)
+            except TypeError:
+                pass
+
     def _cancel_worker(self) -> None:
         if self._worker is None:
             return
-        if self._worker.isRunning():
-            self._worker.requestInterruption()
-            self._worker.wait(3000)
+
+        worker = self._worker
         self._worker = None
         self._pending_poll_mail = False
         self._pending_poll_calendar = False
+        self._disconnect_worker(worker)
+
+        if worker.isRunning():
+            worker.requestInterruption()
+            if not worker.wait(10_000):
+                worker.terminate()
+                worker.wait(2_000)
+        worker.deleteLater()
 
     def _on_worker_finished(self) -> None:
-        worker = self._worker
-        self._worker = None
+        worker = self.sender()
+        if not isinstance(worker, OutlookPollWorker):
+            worker = self._worker
+        if worker is self._worker:
+            self._worker = None
         if worker is not None:
             worker.deleteLater()
         if not self._running:
@@ -166,6 +206,52 @@ class OutlookMonitor(QObject):
             self._pending_poll_mail = False
             self._pending_poll_calendar = False
             self._start_worker(poll_mail=poll_mail, poll_calendar=poll_calendar)
+
+    def _start_mail_events(self) -> None:
+        self._stop_mail_events()
+        if not self._running or not get_outlook_mail_enabled():
+            return
+        if get_outlook_source() != "com" or not get_outlook_mail_events_enabled():
+            return
+        if sys.platform != "win32":
+            return
+
+        try:
+            from outlook_com_events import OutlookComMailEventSource
+
+            source = OutlookComMailEventSource(parent=self)
+            source.mail_received.connect(self._on_event_mail)
+            source.unavailable.connect(self._on_mail_events_lost)
+            if source.start():
+                self._mail_events = source
+                self._poll_mail()
+            else:
+                source.deleteLater()
+        except Exception:
+            self._mail_events = None
+
+    def _stop_mail_events(self) -> None:
+        if self._mail_events is None:
+            return
+        stop = getattr(self._mail_events, "stop", None)
+        if callable(stop):
+            stop()
+        self._mail_events.deleteLater()
+        self._mail_events = None
+
+    def _on_mail_events_lost(self) -> None:
+        self._stop_mail_events()
+        self._restart_timers()
+
+    def _on_event_mail(self, mail: object) -> None:
+        if not isinstance(mail, MailItem):
+            return
+        if self._mail_baseline_pending:
+            seen_ids = set(get_outlook_seen_mail_entry_ids())
+            if mail.entry_id not in seen_ids:
+                self._persist_seen_ids([*seen_ids, mail.entry_id])
+            return
+        self._deliver_new_mail([mail])
 
     def _on_poll_failed(self) -> None:
         if self._outlook_status is not None:
@@ -183,7 +269,15 @@ class OutlookMonitor(QObject):
                 report_ok(result.email, result.unread_count)
 
         if result.poll_mail and get_outlook_mail_enabled():
+            was_baseline = self._mail_baseline_pending
             self._process_mail(result.mail_items)
+            if (
+                was_baseline
+                and get_outlook_source() == "com"
+                and get_outlook_mail_events_enabled()
+            ):
+                self._start_mail_events()
+                self._restart_timers()
         if result.poll_calendar and get_outlook_calendar_enabled():
             self._process_calendar(result.calendar_events)
 
@@ -194,16 +288,20 @@ class OutlookMonitor(QObject):
             if not seen_ids:
                 self._persist_seen_ids([mail.entry_id for mail in messages])
                 return
+        self._deliver_new_mail([mail for mail in messages if mail.entry_id not in seen_ids])
 
-        new_messages = [mail for mail in messages if mail.entry_id not in seen_ids]
-        if not new_messages:
+    def _deliver_new_mail(self, messages: list[MailItem]) -> None:
+        if not messages:
             return
-
-        updated_ids = list(seen_ids)
-        for mail in new_messages:
-            updated_ids.append(mail.entry_id)
+        seen_ids = list(get_outlook_seen_mail_entry_ids())
+        seen_set = set(seen_ids)
+        for mail in messages:
+            if mail.entry_id in seen_set:
+                continue
+            seen_set.add(mail.entry_id)
+            seen_ids.append(mail.entry_id)
             self.mail_received.emit(mail)
-        self._persist_seen_ids(updated_ids)
+        self._persist_seen_ids(seen_ids)
 
     def _process_calendar(self, events: list[CalendarEvent]) -> None:
         now = datetime.now()
@@ -238,10 +336,9 @@ class OutlookMonitor(QObject):
     def _notify(self, text: str, *, tray_title: str = "py-shimeji") -> None:
         pet = self._pick_notify_pet()
         bubble_text = format_speech_bubble_text(text)
-        if bubble_text is not None and pet is not None:
+        if bubble_text is not None and pet is not None and pet.isVisible():
             pet.show_speech_bubble(bubble_text)
-            return
-        if self._tray_notifier is not None:
+        elif self._tray_notifier is not None:
             self._tray_notifier(tray_title, text)
 
     def _on_mail_received(self, mail: MailItem) -> None:

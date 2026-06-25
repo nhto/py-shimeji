@@ -189,6 +189,34 @@ class OutlookComClient:
             self._reset_connection()
             return []
 
+    def get_inbox_items(self) -> Any | None:
+        """Return the default inbox Items collection for COM event sinks."""
+        if not self._connect():
+            return None
+        assert self._namespace is not None
+        try:
+            inbox = self._namespace.GetDefaultFolder(OL_FOLDER_INBOX)
+            return inbox.Items
+        except Exception:
+            self._reset_connection()
+            return None
+
+    def get_outlook_application(self) -> Any | None:
+        """Return the Outlook.Application COM object when connected."""
+        if not self._connect():
+            return None
+        return self._outlook
+
+    def get_mail_item_by_entry_id(self, entry_id: str) -> Any | None:
+        """Fetch a single MAPI item by entry ID."""
+        if not entry_id or not self._connect():
+            return None
+        assert self._namespace is not None
+        try:
+            return self._namespace.GetItemFromID(entry_id)
+        except Exception:
+            return None
+
     def close(self) -> None:
         """Release cached COM objects and uninitialize COM if needed."""
         self._reset_connection()
@@ -251,32 +279,7 @@ class OutlookComClient:
                 continue
 
     def _mail_item_from_com(self, item: Any) -> MailItem | None:
-        try:
-            if int(getattr(item, "Class", 0)) != OL_MAIL_ITEM:
-                return None
-        except Exception:
-            return None
-
-        try:
-            entry_id = _safe_str(getattr(item, "EntryID", ""))
-            if not entry_id:
-                return None
-
-            subject = _safe_str(getattr(item, "Subject", ""), "(no subject)")
-            sender_name = _safe_str(getattr(item, "SenderName", ""), "(unknown)")
-            sender_email = self._sender_email_from_mail_item(item)
-            received_at = _com_to_datetime(getattr(item, "ReceivedTime", datetime.datetime.now()))
-            store_id = self._store_id_from_item(item)
-            return MailItem(
-                entry_id=entry_id,
-                subject=subject,
-                sender_name=sender_name,
-                sender_email=sender_email,
-                received_at=received_at,
-                store_id=store_id,
-            )
-        except Exception:
-            return None
+        return mail_item_from_com(item)
 
     def _calendar_event_from_com(self, item: Any) -> CalendarEvent | None:
         try:
@@ -309,27 +312,65 @@ class OutlookComClient:
             return None
 
     def _sender_email_from_mail_item(self, item: Any) -> str:
-        address = _safe_str(getattr(item, "SenderEmailAddress", ""))
-        if "@" in address and not address.startswith("/"):
-            return address
-        try:
-            smtp = item.PropertyAccessor.GetProperty(PR_SENDER_SMTP_ADDRESS)
-            if smtp:
-                return _safe_str(smtp)
-        except Exception:
-            pass
-        return address or "(unknown)"
+        return sender_email_from_com_mail_item(item)
 
     def _store_id_from_item(self, item: Any) -> str | None:
-        try:
-            parent = getattr(item, "Parent", None)
-            if parent is None:
-                return None
-            store = getattr(parent, "Store", None)
-            if store is None:
-                store_id = getattr(parent, "StoreID", None)
-                return _safe_str(store_id) or None
-            store_id = getattr(store, "StoreID", None)
-            return _safe_str(store_id) or None
-        except Exception:
+        return store_id_from_com_item(item)
+
+
+def sender_email_from_com_mail_item(item: Any) -> str:
+    address = _safe_str(getattr(item, "SenderEmailAddress", ""))
+    if "@" in address and not address.startswith("/"):
+        return address
+    try:
+        smtp = item.PropertyAccessor.GetProperty(PR_SENDER_SMTP_ADDRESS)
+        if smtp:
+            return _safe_str(smtp)
+    except Exception:
+        pass
+    return address or "(unknown)"
+
+
+def store_id_from_com_item(item: Any) -> str | None:
+    try:
+        parent = getattr(item, "Parent", None)
+        if parent is None:
             return None
+        store = getattr(parent, "Store", None)
+        if store is None:
+            store_id = getattr(parent, "StoreID", None)
+            return _safe_str(store_id) or None
+        store_id = getattr(store, "StoreID", None)
+        return _safe_str(store_id) or None
+    except Exception:
+        return None
+
+
+def mail_item_from_com(item: Any) -> MailItem | None:
+    """Convert a classic Outlook COM mail item into a MailItem."""
+    try:
+        if int(getattr(item, "Class", 0)) != OL_MAIL_ITEM:
+            return None
+    except Exception:
+        return None
+
+    try:
+        entry_id = _safe_str(getattr(item, "EntryID", ""))
+        if not entry_id:
+            return None
+
+        subject = _safe_str(getattr(item, "Subject", ""), "(no subject)")
+        sender_name = _safe_str(getattr(item, "SenderName", ""), "(unknown)")
+        sender_email = sender_email_from_com_mail_item(item)
+        received_at = _com_to_datetime(getattr(item, "ReceivedTime", datetime.datetime.now()))
+        store_id = store_id_from_com_item(item)
+        return MailItem(
+            entry_id=entry_id,
+            subject=subject,
+            sender_name=sender_name,
+            sender_email=sender_email,
+            received_at=received_at,
+            store_id=store_id,
+        )
+    except Exception:
+        return None

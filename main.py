@@ -95,6 +95,14 @@ def main() -> int:
     elif not any(pet.isVisible() for pet in pets):
         return 0
 
+    def _shutdown_outlook() -> None:
+        if outlook_monitor is not None:
+            outlook_monitor.shutdown()
+        if outlook_status is not None:
+            outlook_status.shutdown()
+
+    app.aboutToQuit.connect(_shutdown_outlook)
+
     return app.exec()
 
 
