@@ -260,6 +260,29 @@ class OutlookComClient:
         except Exception:
             return None
 
+    def display_item_by_entry_id(
+        self,
+        entry_id: str,
+        *,
+        store_id: str | None = None,
+    ) -> bool:
+        """Open a mail or calendar item in the classic Outlook UI."""
+        if not entry_id or not self._connect():
+            return False
+        assert self._namespace is not None
+        try:
+            if store_id:
+                item = self._namespace.GetItemFromID(entry_id, store_id)
+            else:
+                item = self._namespace.GetItemFromID(entry_id)
+            display = getattr(item, "Display", None)
+            if callable(display):
+                display()
+                return True
+        except Exception:
+            self._reset_connection()
+        return False
+
     def close(self) -> None:
         """Release cached COM objects and uninitialize COM if needed."""
         self._reset_connection()
