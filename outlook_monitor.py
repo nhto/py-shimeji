@@ -41,6 +41,7 @@ from outlook_poll_worker import (
     OutlookPollWorker,
     format_poll_failure_tray_hint,
 )
+from outlook_actions import join_meeting, open_calendar_event, open_mail
 from outlook_text import truncate_notification_line
 from pet_window import PetWindow
 
@@ -51,6 +52,10 @@ _MAX_SEEN_MAIL_IDS = 500
 
 def _reminder_key(entry_id: str, minutes: int) -> str:
     return f"{entry_id}|{minutes}"
+
+
+def _mail_snooze_key(entry_id: str) -> str:
+    return f"mail|{entry_id}"
 
 
 def format_mail_notification(mail: MailItem) -> str:
@@ -354,15 +359,28 @@ class OutlookMonitor(QObject):
     def _deliver_new_mail(self, messages: list[MailItem]) -> None:
         if not messages:
             return
+        now = datetime.now()
         seen_ids = list(get_outlook_seen_mail_entry_ids())
         seen_set = set(seen_ids)
+        snoozed = dict(get_outlook_snoozed_events())
+        snoozed_changed = False
         for mail in messages:
             if mail.entry_id in seen_set:
                 continue
+            key = _mail_snooze_key(mail.entry_id)
+            until_raw = snoozed.get(key)
+            if until_raw is not None:
+                until = self._parse_snooze_until(until_raw)
+                if until is not None and now < until:
+                    continue
+                del snoozed[key]
+                snoozed_changed = True
             seen_set.add(mail.entry_id)
             seen_ids.append(mail.entry_id)
             _logger.info("New mail: %s", format_mail_log_summary(mail))
             self.mail_received.emit(mail)
+        if snoozed_changed:
+            set_outlook_snoozed_events(snoozed)
         self._persist_seen_ids(seen_ids)
 
     def _process_calendar(self, events: list[CalendarEvent]) -> None:
@@ -431,6 +449,22 @@ class OutlookMonitor(QObject):
             key,
         )
 
+    def _snooze_mail(self, entry_id: str) -> None:
+        key = _mail_snooze_key(entry_id)
+        snoozed = dict(get_outlook_snoozed_events())
+        until = datetime.now() + timedelta(minutes=MEETING_SNOOZE_MINUTES)
+        snoozed[key] = until.isoformat(timespec="seconds")
+        set_outlook_snoozed_events(snoozed)
+
+        seen_ids = list(get_outlook_seen_mail_entry_ids())
+        if entry_id in seen_ids:
+            set_outlook_seen_mail_entry_ids([item_id for item_id in seen_ids if item_id != entry_id])
+        _logger.info(
+            "Mail notification snoozed for %s min: %s",
+            MEETING_SNOOZE_MINUTES,
+            entry_id,
+        )
+
     def _persist_seen_ids(self, entry_ids: list[str]) -> None:
         trimmed = entry_ids[-_MAX_SEEN_MAIL_IDS:]
         set_outlook_seen_mail_entry_ids(trimmed)
@@ -466,7 +500,49 @@ class OutlookMonitor(QObject):
             self._tray_notifier(tray_title, text)
 
     def _on_mail_received(self, mail: MailItem) -> None:
-        self._notify(format_mail_notification(mail))
+        snooze_label = f"Snooze {MEETING_SNOOZE_MINUTES} min"
+        actions = [
+            (
+                "Open in Outlook",
+                lambda mail_item=mail: open_mail(mail_item),
+            ),
+            (
+                snooze_label,
+                lambda entry_id=mail.entry_id: self._snooze_mail(entry_id),
+            ),
+        ]
+        self._notify(format_mail_notification(mail), bubble_actions=actions)
+
+    def _meeting_bubble_actions(
+        self,
+        event: CalendarEvent,
+        threshold: int,
+    ) -> list[tuple[str, Callable[[], None]]]:
+        actions: list[tuple[str, Callable[[], None]]] = []
+        if event.online_meeting_url.strip():
+            actions.append(
+                (
+                    "Join meeting",
+                    lambda meeting=event: join_meeting(meeting),
+                )
+            )
+        actions.append(
+            (
+                "Open in Outlook",
+                lambda meeting=event: open_calendar_event(meeting),
+            )
+        )
+        snooze_label = f"Snooze {MEETING_SNOOZE_MINUTES} min"
+        actions.append(
+            (
+                snooze_label,
+                lambda entry_id=event.entry_id, reminder_threshold=threshold: self._snooze_meeting(
+                    entry_id,
+                    reminder_threshold,
+                ),
+            )
+        )
+        return actions
 
     def _on_meeting_soon(
         self,
@@ -475,14 +551,7 @@ class OutlookMonitor(QObject):
         threshold: int,
     ) -> None:
         text = format_meeting_notification(event, minutes_left)
-        snooze_label = f"Snooze {MEETING_SNOOZE_MINUTES} min"
-        actions = [
-            (
-                snooze_label,
-                lambda entry_id=event.entry_id, reminder_threshold=threshold: self._snooze_meeting(
-                    entry_id,
-                    reminder_threshold,
-                ),
-            )
-        ]
-        self._notify(text, bubble_actions=actions)
+        self._notify(
+            text,
+            bubble_actions=self._meeting_bubble_actions(event, threshold),
+        )
