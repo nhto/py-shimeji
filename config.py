@@ -376,6 +376,12 @@ TRAY_SHOW_PET_LABELS: dict[str, str] = {
     "zh-Hant": "顯示寵物 {index}",
 }
 
+TRAY_TOGGLE_ALL_PETS_TOOLTIP_LABELS: dict[str, str] = {
+    "en": "The shortcut shows or hides all pets.",
+    "zh-Hans": "该快捷键会显示或隐藏全部宠物。",
+    "zh-Hant": "該快捷鍵會顯示或隱藏全部寵物。",
+}
+
 TRAY_CHANGE_SPRITES_LABELS: dict[str, str] = {
     "en": "Change Pet {index} sprites...",
     "zh-Hans": "更改宠物 {index} 形象...",
