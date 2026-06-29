@@ -42,9 +42,11 @@ from config import (
     TRAY_PREFERENCES_SAVED_MESSAGE_LABELS,
     TRAY_QUIT_LABELS,
     TRAY_SHOW_PET_LABELS,
+    TRAY_TOGGLE_ALL_PETS_TOOLTIP_LABELS,
     TRAY_TOOLTIP_OUTLOOK_UNREAD_LABELS,
     TRAY_TOOLTIP_OUTLOOK_UNAVAILABLE_LABELS,
     get_chat_language,
+    get_hotkey_binding,
     get_outlook_enabled,
     get_pet_sprites_dir,
     get_saved_pet_visible,
@@ -56,6 +58,7 @@ from config import (
     set_saved_pet_visible,
     set_saved_pets_paused,
 )
+from hotkeys import GlobalHotkeyManager
 from outlook_settings_dialog import open_outlook_settings_dialog
 from pet_window import PetWindow
 from sprite_picker_dialog import open_sprite_picker_dialog
@@ -123,6 +126,7 @@ class SystemTray:
         self._pause_pets_action: QAction | None = None
         self._click_through_action: QAction | None = None
         self._quit_action: QAction | None = None
+        self._hotkeys = GlobalHotkeyManager(parent=pets[0] if pets else None)
 
         self._menu = self._build_menu()
         self._menu_host_pet: PetWindow | None = None
@@ -131,6 +135,7 @@ class SystemTray:
         self._tray.show()
 
         self._apply_menu_language()
+        self._setup_hotkeys()
         if self._outlook_status is not None:
             self._outlook_status.status_changed.connect(self._on_outlook_status_changed)
             self._outlook_status.unread_count_changed.connect(self._on_outlook_unread_changed)
@@ -143,6 +148,22 @@ class SystemTray:
                 QSystemTrayIcon.MessageIcon.Information,
                 8_000,
             )
+
+    @staticmethod
+    def _hotkey_hint(action: str) -> str:
+        binding = get_hotkey_binding(action)
+        return f" ({binding})" if binding else ""
+
+    def _action_text_with_hotkey(self, text: str, action: str) -> str:
+        """Append a visible shortcut suffix for tray menu items."""
+        return text + self._hotkey_hint(action)
+
+    def _setup_hotkeys(self) -> None:
+        self._hotkeys.register("toggle_pause", self.toggle_motion_paused)
+        self._hotkeys.register("toggle_click_through", self.toggle_click_through)
+        self._hotkeys.register("toggle_pets_visible", self.toggle_all_pets_visible)
+        self._hotkeys.register("open_chat", self._open_chat)
+        self._hotkeys.reload()
 
     def _build_menu(self) -> QMenu:
         menu = QMenu()
@@ -237,7 +258,10 @@ class SystemTray:
 
     def _pet_visibility_label(self, index: int, visible: bool, language: str | None = None) -> str:
         labels = TRAY_HIDE_PET_LABELS if visible else TRAY_SHOW_PET_LABELS
-        return localized(labels, language).format(index=index)
+        text = localized(labels, language).format(index=index)
+        if index == 1:
+            return self._action_text_with_hotkey(text, "toggle_pets_visible")
+        return text
 
     def _apply_menu_language(self, language: str | None = None) -> None:
         lang = language or get_chat_language()
@@ -245,6 +269,10 @@ class SystemTray:
         for index, pet in enumerate(self._pets, start=1):
             action = self._visibility_actions[index]
             action.setText(self._pet_visibility_label(index, pet.isVisible(), lang))
+            if index == 1:
+                action.setToolTip(localized(TRAY_TOGGLE_ALL_PETS_TOOLTIP_LABELS, lang))
+            else:
+                action.setToolTip("")
 
         for index, action in self._change_sprites_actions.items():
             action.setText(
@@ -252,7 +280,9 @@ class SystemTray:
             )
 
         if self._chat_action is not None:
-            self._chat_action.setText(localized(TRAY_CHAT_LABELS, lang))
+            self._chat_action.setText(
+                self._action_text_with_hotkey(localized(TRAY_CHAT_LABELS, lang), "open_chat")
+            )
         if self._preferences_action is not None:
             self._preferences_action.setText(localized(TRAY_PREFERENCE_LABELS, lang))
         if self._behavior_action is not None:
@@ -270,12 +300,20 @@ class SystemTray:
                 localized(TRAY_OUTLOOK_SETTINGS_LABELS, lang)
             )
         if self._pause_pets_action is not None:
-            self._pause_pets_action.setText(localized(TRAY_PAUSE_PETS_LABELS, lang))
+            self._pause_pets_action.setText(
+                self._action_text_with_hotkey(
+                    localized(TRAY_PAUSE_PETS_LABELS, lang), "toggle_pause"
+                )
+            )
             self._pause_pets_action.setToolTip(
                 localized(TRAY_PAUSE_PETS_TOOLTIP_LABELS, lang)
             )
         if self._click_through_action is not None:
-            self._click_through_action.setText(localized(TRAY_CLICK_THROUGH_LABELS, lang))
+            self._click_through_action.setText(
+                self._action_text_with_hotkey(
+                    localized(TRAY_CLICK_THROUGH_LABELS, lang), "toggle_click_through"
+                )
+            )
             self._click_through_action.setToolTip(
                 localized(TRAY_CLICK_THROUGH_TOOLTIP_LABELS, lang)
             )
@@ -355,14 +393,12 @@ class SystemTray:
     def _on_outlook_unread_changed(self, _count: int) -> None:
         self._update_tray_tooltip()
 
-    @staticmethod
-    def _make_visibility_toggle(pet: PetWindow, action: QAction, index: int):
+    def _make_visibility_toggle(self, pet: PetWindow, action: QAction, index: int):
         def toggle(visible: bool) -> None:
             pet.setVisible(visible)
             set_saved_pet_visible(index - 1, visible)
             language = get_chat_language()
-            labels = TRAY_HIDE_PET_LABELS if visible else TRAY_SHOW_PET_LABELS
-            action.setText(localized(labels, language).format(index=index))
+            action.setText(self._pet_visibility_label(index, visible, language))
 
         return toggle
 
@@ -385,9 +421,7 @@ class SystemTray:
                     language = get_chat_language()
                     action.blockSignals(True)
                     action.setChecked(True)
-                    action.setText(
-                        localized(TRAY_HIDE_PET_LABELS, language).format(index=index)
-                    )
+                    action.setText(self._pet_visibility_label(index, True, language))
                     action.blockSignals(False)
 
         return change_sprites
@@ -400,6 +434,39 @@ class SystemTray:
         for pet in self._pets:
             pet.set_motion_paused(enabled)
         set_saved_pets_paused(enabled)
+
+    def toggle_click_through(self) -> None:
+        current = bool(self._pets) and all(pet.click_through for pet in self._pets)
+        new_state = not current
+        self._set_click_through(new_state)
+        if self._click_through_action is not None:
+            self._click_through_action.blockSignals(True)
+            self._click_through_action.setChecked(new_state)
+            self._click_through_action.blockSignals(False)
+
+    def toggle_motion_paused(self) -> None:
+        current = bool(self._pets) and all(pet.motion_paused for pet in self._pets)
+        new_state = not current
+        self._set_motion_paused(new_state)
+        if self._pause_pets_action is not None:
+            self._pause_pets_action.blockSignals(True)
+            self._pause_pets_action.setChecked(new_state)
+            self._pause_pets_action.blockSignals(False)
+
+    def toggle_all_pets_visible(self) -> None:
+        if not self._pets:
+            return
+        show = not any(pet.isVisible() for pet in self._pets)
+        language = get_chat_language()
+        for index, pet in enumerate(self._pets, start=1):
+            pet.setVisible(show)
+            set_saved_pet_visible(index - 1, show)
+            action = self._visibility_actions.get(index)
+            if action is not None:
+                action.blockSignals(True)
+                action.setChecked(show)
+                action.setText(self._pet_visibility_label(index, show, language))
+                action.blockSignals(False)
 
     def _sync_peer_pets(self) -> None:
         total = len(self._pets)
@@ -569,6 +636,7 @@ class SystemTray:
         )
 
     def _quit(self) -> None:
+        self._hotkeys.shutdown()
         if self._outlook_monitor is not None:
             self._outlook_monitor.shutdown()
         if self._outlook_status is not None:

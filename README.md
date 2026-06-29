@@ -274,6 +274,19 @@ You can also change a pet's sprites at runtime from the **system tray** menu: **
 - **Release in mid-air** — FALLING until the nearest ledge or floor
 - **System tray** — show/hide each pet, chat with Bubu, manage preferences and pet behavior, pause pets (reduce motion), toggle click-through, change sprite folders, or quit
 
+### Global hotkeys (Windows)
+
+Shortcuts are shown in the tray menu next to each action. Defaults:
+
+| Action | Default shortcut |
+|--------|------------------|
+| Show/hide all pets | `Ctrl+Alt+H` |
+| Open chat | `Ctrl+Alt+B` |
+| Pause pets (reduce motion) | `Ctrl+Alt+P` |
+| Click-through | `Ctrl+Alt+C` |
+
+Bindings are stored in `.app_settings.json` under `hotkeys`. Set a binding to an empty string to disable it.
+
 ## Pet behavior settings
 
 Open **Pet behavior...** from the system tray to adjust:
