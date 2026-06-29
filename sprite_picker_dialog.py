@@ -27,18 +27,28 @@ from config import (
     SPRITE_PICKER_BROWSE_LABELS,
     SPRITE_PICKER_CANCEL_LABELS,
     SPRITE_PICKER_FILES_HEADING_LABELS,
+    SPRITE_PICKER_IMPORT_DONE_LABELS,
+    SPRITE_PICKER_IMPORT_FAILED_LABELS,
+    SPRITE_PICKER_IMPORT_LABELS,
     SPRITE_PICKER_INTRO_LABELS,
     SPRITE_PICKER_INVALID_FOLDER_LABELS,
     SPRITE_PICKER_OPTIONAL_LABELS,
+    SPRITE_PICKER_SHIMEJI_HINT_LABELS,
     SPRITE_PICKER_TITLE_LABELS,
+    SPRITES_ROOT,
     TRAY_SELECT_SPRITES_TITLE_LABELS,
     discover_sprite_packs,
     get_chat_language,
-    iter_sprite_file_entries,
     localized,
     pet_has_sprites,
     sprite_pack_display_name,
     sprite_state_label,
+)
+from shimeji_pack import (
+    convert_shimeji_pack,
+    iter_sprite_display_entries,
+    preview_sprite_path,
+    sprite_pack_kind,
 )
 from dialog_theme import (
     SPRITE_NAME_MISSING_STYLE,
@@ -96,17 +106,16 @@ class _SpriteCard(QFrame):
 
     @staticmethod
     def _load_thumbnail(sprites_dir: Path) -> QPixmap:
-        for candidate in ("idle_1.png", "walk_1.png", "sit_1.png", "drag_1.png"):
-            path = sprites_dir / candidate
-            if path.is_file():
-                pixmap = QPixmap(str(path))
-                if not pixmap.isNull():
-                    return pixmap.scaled(
-                        _THUMB_SIZE,
-                        _THUMB_SIZE,
-                        Qt.AspectRatioMode.KeepAspectRatio,
-                        Qt.TransformationMode.SmoothTransformation,
-                    )
+        path = preview_sprite_path(sprites_dir)
+        if path is not None and path.is_file():
+            pixmap = QPixmap(str(path))
+            if not pixmap.isNull():
+                return pixmap.scaled(
+                    _THUMB_SIZE,
+                    _THUMB_SIZE,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
         placeholder = QPixmap(_THUMB_SIZE, _THUMB_SIZE)
         placeholder.fill(Qt.GlobalColor.transparent)
         return placeholder
@@ -161,7 +170,10 @@ class _SpriteFilePanel(QFrame):
 
     def _build_rows(self) -> None:
         current_state: str | None = None
-        for state, filename, optional in iter_sprite_file_entries():
+        for state, label, optional in (
+            (state, label, optional)
+            for state, label, optional, _present in iter_sprite_display_entries(None)
+        ):
             row = QHBoxLayout()
             row.setContentsMargins(0, 0, 0, 0)
             row.setSpacing(8)
@@ -174,7 +186,7 @@ class _SpriteFilePanel(QFrame):
                 current_state = state
             row.addWidget(state_label)
 
-            name_label = QLabel(filename)
+            name_label = QLabel(label)
             name_label.setObjectName("spriteFileName")
             row.addWidget(name_label, stretch=1)
 
@@ -191,7 +203,7 @@ class _SpriteFilePanel(QFrame):
 
             self._rows.addLayout(row)
             self._file_rows.append(
-                (state, filename, optional, state_label, name_label, optional_label, status_label)
+                (state, label, optional, state_label, name_label, optional_label, status_label)
             )
 
     def set_language(self, language: str) -> None:
@@ -215,13 +227,11 @@ class _SpriteFilePanel(QFrame):
         self._refresh_status()
 
     def _refresh_status(self) -> None:
-        for _state, filename, optional, _state_label, name_label, _optional_label, status_label in (
-            self._file_rows
-        ):
-            present = (
-                self._sprites_dir is not None
-                and (self._sprites_dir / filename).is_file()
-            )
+        entries = iter_sprite_display_entries(self._sprites_dir)
+        for (entry, row) in zip(entries, self._file_rows):
+            _state, label, optional, present = entry
+            _state_key, _old_label, _optional, _state_label, name_label, _optional_label, status_label = row
+            name_label.setText(label)
             if present:
                 status_label.setText("✓")
                 status_label.setStyleSheet(SPRITE_STATUS_OK_STYLE)
@@ -322,6 +332,12 @@ class SpritePickerDialog(QDialog):
         self._intro.setWordWrap(True)
         layout.addWidget(self._intro)
 
+        self._shimeji_hint = QLabel()
+        self._shimeji_hint.setObjectName("spriteShimejiHint")
+        self._shimeji_hint.setWordWrap(True)
+        self._shimeji_hint.hide()
+        layout.addWidget(self._shimeji_hint)
+
         self._file_panel = _SpriteFilePanel(parent=root)
         layout.addWidget(self._file_panel)
 
@@ -345,6 +361,12 @@ class SpritePickerDialog(QDialog):
         self._browse_button.setObjectName("browseButton")
         self._browse_button.clicked.connect(self._browse_custom_folder)
         button_row.addWidget(self._browse_button)
+
+        self._import_button = QPushButton()
+        self._import_button.setObjectName("importButton")
+        self._import_button.clicked.connect(self._import_shimeji_pack)
+        self._import_button.hide()
+        button_row.addWidget(self._import_button)
         button_row.addStretch()
 
         self._cancel_button = QPushButton()
@@ -375,8 +397,10 @@ class SpritePickerDialog(QDialog):
         self._file_panel.set_language(self._language)
         self._file_panel.set_folder(self._selected_dir)
         self._browse_button.setText(localized(SPRITE_PICKER_BROWSE_LABELS, self._language))
+        self._import_button.setText(localized(SPRITE_PICKER_IMPORT_LABELS, self._language))
         self._apply_button.setText(localized(SPRITE_PICKER_APPLY_LABELS, self._language))
         self._cancel_button.setText(localized(SPRITE_PICKER_CANCEL_LABELS, self._language))
+        self._update_shimeji_hint()
 
     def _reload_packs(self) -> None:
         while self._grid.count():
@@ -402,12 +426,54 @@ class SpritePickerDialog(QDialog):
             self._cards.append(card)
 
         self._file_panel.set_folder(self._selected_dir)
+        self._update_shimeji_hint()
 
     def _select_dir(self, sprites_dir: Path) -> None:
         self._selected_dir = sprites_dir.resolve()
         for card in self._cards:
             card.set_selected(card.sprites_dir.resolve() == self._selected_dir)
         self._file_panel.set_folder(self._selected_dir)
+        self._update_shimeji_hint()
+
+    def _update_shimeji_hint(self) -> None:
+        is_shimeji = sprite_pack_kind(self._selected_dir) == "shimeji"
+        if is_shimeji:
+            self._shimeji_hint.setText(
+                localized(SPRITE_PICKER_SHIMEJI_HINT_LABELS, self._language)
+            )
+            self._shimeji_hint.show()
+            self._import_button.show()
+        else:
+            self._shimeji_hint.hide()
+            self._import_button.hide()
+
+    def _import_shimeji_pack(self) -> None:
+        base_name = self._selected_dir.name
+        dest = SPRITES_ROOT / "imported" / base_name
+        suffix = 1
+        while dest.exists():
+            suffix += 1
+            dest = SPRITES_ROOT / "imported" / f"{base_name}_{suffix}"
+
+        if not convert_shimeji_pack(self._selected_dir, dest):
+            QMessageBox.warning(
+                self,
+                localized(SPRITE_PICKER_TITLE_LABELS, self._language).format(
+                    index=self._pet_index
+                ),
+                localized(SPRITE_PICKER_IMPORT_FAILED_LABELS, self._language),
+            )
+            return
+
+        QMessageBox.information(
+            self,
+            localized(SPRITE_PICKER_TITLE_LABELS, self._language).format(
+                index=self._pet_index
+            ),
+            localized(SPRITE_PICKER_IMPORT_DONE_LABELS, self._language).format(path=dest),
+        )
+        self._selected_dir = dest.resolve()
+        self._reload_packs()
 
     def _browse_custom_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(

@@ -445,9 +445,42 @@ SPRITE_PICKER_CANCEL_LABELS: dict[str, str] = {
 }
 
 SPRITE_PICKER_INVALID_FOLDER_LABELS: dict[str, str] = {
-    "en": "That folder does not contain any supported sprite PNGs.",
-    "zh-Hans": "该文件夹不包含任何支持的形象 PNG 文件。",
-    "zh-Hant": "該資料夾不包含任何支援的形象 PNG 檔案。",
+    "en": (
+        "That folder does not contain py-shimeji PNGs (idle_1.png, …) "
+        "or a Shimeji pack (conf/actions.xml plus image files)."
+    ),
+    "zh-Hans": (
+        "该文件夹不包含 py-shimeji 的 PNG（idle_1.png 等），"
+        "也不是 Shimeji 形象包（conf/actions.xml 与图片文件）。"
+    ),
+    "zh-Hant": (
+        "該資料夾不包含 py-shimeji 的 PNG（idle_1.png 等），"
+        "也不是 Shimeji 形象包（conf/actions.xml 與圖片檔案）。"
+    ),
+}
+
+SPRITE_PICKER_SHIMEJI_HINT_LABELS: dict[str, str] = {
+    "en": "Shimeji pack detected — frames are mapped from actions.xml automatically.",
+    "zh-Hans": "已识别 Shimeji 形象包 — 将自动从 actions.xml 映射帧。",
+    "zh-Hant": "已識別 Shimeji 形象包 — 將自動從 actions.xml 對應幀。",
+}
+
+SPRITE_PICKER_IMPORT_LABELS: dict[str, str] = {
+    "en": "Convert to py-shimeji PNGs…",
+    "zh-Hans": "转换为 py-shimeji PNG…",
+    "zh-Hant": "轉換為 py-shimeji PNG…",
+}
+
+SPRITE_PICKER_IMPORT_DONE_LABELS: dict[str, str] = {
+    "en": "Converted Shimeji pack to:\n{path}",
+    "zh-Hans": "已将 Shimeji 形象包转换到：\n{path}",
+    "zh-Hant": "已將 Shimeji 形象包轉換到：\n{path}",
+}
+
+SPRITE_PICKER_IMPORT_FAILED_LABELS: dict[str, str] = {
+    "en": "Could not convert that Shimeji pack.",
+    "zh-Hans": "无法转换该 Shimeji 形象包。",
+    "zh-Hant": "無法轉換該 Shimeji 形象包。",
 }
 
 TRAY_CHAT_LABELS: dict[str, str] = {
@@ -1163,10 +1196,12 @@ def _legacy_shared_sprites_present() -> bool:
 
 
 def pet_has_sprites(sprites_dir: Path) -> bool:
-    """True when the folder contains at least one expected sprite PNG."""
+    """True when the folder contains native or Shimeji community sprite frames."""
+    from shimeji_pack import has_native_sprites, is_shimeji_pack
+
     if not sprites_dir.is_dir():
         return False
-    return any((sprites_dir / name).is_file() for names in SPRITE_FILES.values() for name in names)
+    return has_native_sprites(sprites_dir) or is_shimeji_pack(sprites_dir)
 
 
 def iter_sprite_file_entries() -> list[tuple[str, str, bool]]:
