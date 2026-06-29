@@ -71,8 +71,10 @@ if TYPE_CHECKING:
 
 def _build_tray_icon() -> QIcon:
     """Use the first pet's idle sprite when available; otherwise draw a fallback blob."""
-    sprite_path = get_pet_sprites_dir(0) / "idle_1.png"
-    if sprite_path.is_file():
+    from shimeji_pack import preview_sprite_path
+
+    sprite_path = preview_sprite_path(get_pet_sprites_dir(0))
+    if sprite_path is not None and sprite_path.is_file():
         icon = QIcon(str(sprite_path))
         if not icon.isNull():
             return icon

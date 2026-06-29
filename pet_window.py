@@ -152,11 +152,17 @@ class SpriteCache:
         self._load_all()
 
     def _load_all(self) -> None:
+        from shimeji_pack import resolve_sprite_frame_paths
+
+        frame_paths = resolve_sprite_frame_paths(self._assets_dir)
         for group, filenames in SPRITE_FILES.items():
+            paths = frame_paths.get(group, [])
             frames: list[QPixmap | None] = []
-            for name in filenames:
-                path = self._assets_dir / name
-                frames.append(_prepare_sprite(path) if path.is_file() else None)
+            for index, _name in enumerate(filenames):
+                path = paths[index] if index < len(paths) else None
+                frames.append(
+                    _prepare_sprite(path) if path is not None and path.is_file() else None
+                )
             self._cache[group] = frames
 
     def reload(self, assets_dir: Path | None = None) -> None:
