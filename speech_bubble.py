@@ -9,11 +9,12 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor, QCursor, QFont, QFontMetrics, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import QWidget
 
-from config import (
+from settings.core import (
     SPEECH_BUBBLE_DURATION_MS,
     SPEECH_BUBBLE_GAP_PX,
     SPEECH_BUBBLE_MAX_WIDTH,
     SPEECH_BUBBLE_PADDING_PX,
+    format_speech_bubble_text,
 )
 
 if TYPE_CHECKING:

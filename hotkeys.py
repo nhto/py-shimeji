@@ -51,8 +51,12 @@ class ParsedHotkey:
     vk: int
 
 
-def _parse_hotkey(binding: str) -> ParsedHotkey | None:
+def parse_hotkey(binding: str) -> ParsedHotkey | None:
     """Parse strings like ``Ctrl+Alt+P`` into Windows modifier and virtual-key codes."""
+    return _parse_hotkey(binding)
+
+
+def _parse_hotkey(binding: str) -> ParsedHotkey | None:
     if sys.platform != "win32":
         return None
 

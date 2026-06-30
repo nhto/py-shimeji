@@ -46,7 +46,6 @@ from config import (
     SPRITE_FILES,
     SURFACE_REFRESH_MS,
     TOP_PERCH_MARGIN_PX,
-    format_speech_bubble_text,
     get_ambient_phrase,
     get_ambient_speech_enabled,
     get_cursor_chase_chance,
@@ -59,6 +58,7 @@ from config import (
     AMBIENT_SPEECH_INTERVAL_MAX_MS,
     AMBIENT_SPEECH_INTERVAL_MIN_MS,
 )
+from settings.core import format_speech_bubble_text
 from speech_bubble import SpeechBubbleWindow
 from states import PetState, PetStateMachine
 from surfaces import HorizontalLedge, SurfaceTracker, VerticalLedge
