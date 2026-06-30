@@ -145,6 +145,24 @@ SPRITE_PICKER_INTRO_LABELS: dict[str, str] = {
     "zh-Hant": "選擇一套形象，或瀏覽自訂資料夾。",
 }
 
+SPRITE_PICKER_SCALE_LABELS: dict[str, str] = {
+    "en": "Sprite size: {value}%",
+    "zh-Hans": "形象大小：{value}%",
+    "zh-Hant": "形象大小：{value}%",
+}
+
+SPRITE_PICKER_SCALE_HINT_LABELS: dict[str, str] = {
+    "en": "Some packs look too small or large at the default size. Adjust here.",
+    "zh-Hans": "部分形象包在默认大小下会显得过小或过大，可在此调整。",
+    "zh-Hant": "部分形象包在預設大小下會顯得過小或過大，可在此調整。",
+}
+
+SPRITE_PICKER_SCALE_RESET_LABELS: dict[str, str] = {
+    "en": "Reset to 100%",
+    "zh-Hans": "重置为 100%",
+    "zh-Hant": "重設為 100%",
+}
+
 SPRITE_PICKER_FILES_HEADING_LABELS: dict[str, str] = {
     "en": "PNG files in the folder",
     "zh-Hans": "文件夹中的 PNG 文件",

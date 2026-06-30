@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSlider,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -33,12 +34,19 @@ from config import (
     SPRITE_PICKER_INTRO_LABELS,
     SPRITE_PICKER_INVALID_FOLDER_LABELS,
     SPRITE_PICKER_OPTIONAL_LABELS,
+    SPRITE_PICKER_SCALE_HINT_LABELS,
+    SPRITE_PICKER_SCALE_LABELS,
+    SPRITE_PICKER_SCALE_RESET_LABELS,
     SPRITE_PICKER_SHIMEJI_HINT_LABELS,
     SPRITE_PICKER_TITLE_LABELS,
+    SPRITE_SCALE_PERCENT_DEFAULT,
+    SPRITE_SCALE_PERCENT_MAX,
+    SPRITE_SCALE_PERCENT_MIN,
     SPRITES_ROOT,
     TRAY_SELECT_SPRITES_TITLE_LABELS,
     discover_sprite_packs,
     get_chat_language,
+    get_sprite_scale_percent,
     localized,
     pet_has_sprites,
     sprite_pack_display_name,
@@ -51,6 +59,7 @@ from shimeji_pack import (
     sprite_pack_kind,
 )
 from dialog_theme import (
+    DIALOG_HINT_STYLE,
     SPRITE_NAME_MISSING_STYLE,
     SPRITE_NAME_OK_STYLE,
     SPRITE_NAME_OPTIONAL_STYLE,
@@ -264,15 +273,21 @@ class SpritePickerDialog(QDialog):
         self._selected_dir = current_dir.resolve()
         self._cards: list[_SpriteCard] = []
         self._result_dir: Path | None = None
+        self._sprite_scale_percent = get_sprite_scale_percent(pet_index - 1)
 
         self._setup_window()
         self._build_ui()
+        self._load_scale_slider()
         self._reload_packs()
         self._apply_language()
 
     @property
     def selected_dir(self) -> Path | None:
         return self._result_dir
+
+    @property
+    def sprite_scale_percent(self) -> int:
+        return self._sprite_scale_percent
 
     def _setup_window(self) -> None:
         self.setModal(True)
@@ -331,6 +346,22 @@ class SpritePickerDialog(QDialog):
         self._intro.setObjectName("spriteIntro")
         self._intro.setWordWrap(True)
         layout.addWidget(self._intro)
+
+        self._scale_label = QLabel()
+        scale_header = QHBoxLayout()
+        scale_header.addWidget(self._scale_label)
+        scale_header.addStretch()
+        self._scale_reset_button = QPushButton()
+        self._scale_reset_button.clicked.connect(self._reset_sprite_scale)
+        scale_header.addWidget(self._scale_reset_button)
+        layout.addLayout(scale_header)
+        self._scale_slider = QSlider(Qt.Orientation.Horizontal)
+        self._scale_slider.setRange(SPRITE_SCALE_PERCENT_MIN, SPRITE_SCALE_PERCENT_MAX)
+        self._scale_slider.valueChanged.connect(self._update_scale_label)
+        layout.addWidget(self._scale_slider)
+        self._scale_hint = QLabel()
+        self._scale_hint.setStyleSheet(DIALOG_HINT_STYLE)
+        layout.addWidget(self._scale_hint)
 
         self._shimeji_hint = QLabel()
         self._shimeji_hint.setObjectName("spriteShimejiHint")
@@ -394,6 +425,11 @@ class SpritePickerDialog(QDialog):
             )
         )
         self._intro.setText(localized(SPRITE_PICKER_INTRO_LABELS, self._language))
+        self._scale_hint.setText(localized(SPRITE_PICKER_SCALE_HINT_LABELS, self._language))
+        self._scale_reset_button.setText(
+            localized(SPRITE_PICKER_SCALE_RESET_LABELS, self._language)
+        )
+        self._update_scale_label(self._scale_slider.value())
         self._file_panel.set_language(self._language)
         self._file_panel.set_folder(self._selected_dir)
         self._browse_button.setText(localized(SPRITE_PICKER_BROWSE_LABELS, self._language))
@@ -401,6 +437,18 @@ class SpritePickerDialog(QDialog):
         self._apply_button.setText(localized(SPRITE_PICKER_APPLY_LABELS, self._language))
         self._cancel_button.setText(localized(SPRITE_PICKER_CANCEL_LABELS, self._language))
         self._update_shimeji_hint()
+
+    def _load_scale_slider(self) -> None:
+        self._scale_slider.setValue(self._sprite_scale_percent)
+
+    def _update_scale_label(self, value: int) -> None:
+        self._sprite_scale_percent = value
+        self._scale_label.setText(
+            localized(SPRITE_PICKER_SCALE_LABELS, self._language).format(value=value)
+        )
+
+    def _reset_sprite_scale(self) -> None:
+        self._scale_slider.setValue(SPRITE_SCALE_PERCENT_DEFAULT)
 
     def _reload_packs(self) -> None:
         while self._grid.count():
@@ -520,9 +568,9 @@ def open_sprite_picker_dialog(
     current_dir: Path,
     parent: QWidget | None = None,
     pet: PetWindow | None = None,
-) -> Path | None:
+) -> tuple[Path, int] | None:
     """
-    Show the sprite picker and return the chosen folder, or None if cancelled.
+    Show the sprite picker and return the chosen folder and scale, or None if cancelled.
     """
     if pet is not None:
         pet.begin_chat_hold()
@@ -530,7 +578,10 @@ def open_sprite_picker_dialog(
         dialog = SpritePickerDialog(pet_index, current_dir, parent=parent, pet=pet)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return None
-        return dialog.selected_dir
+        selected = dialog.selected_dir
+        if selected is None:
+            return None
+        return selected, dialog.sprite_scale_percent
     finally:
         if pet is not None:
             pet.end_chat_hold()

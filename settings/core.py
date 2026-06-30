@@ -5,6 +5,17 @@ from __future__ import annotations
 PET_WIDTH: int = 64
 PET_HEIGHT: int = 64
 
+SPRITE_SCALE_PERCENT_DEFAULT: int = 100
+SPRITE_SCALE_PERCENT_MIN: int = 50
+SPRITE_SCALE_PERCENT_MAX: int = 200
+
+
+def effective_pet_size(scale_percent: int) -> tuple[int, int]:
+    """Return widget width/height for a sprite scale percentage."""
+    width = max(1, round(PET_WIDTH * scale_percent / 100))
+    height = max(1, round(PET_HEIGHT * scale_percent / 100))
+    return width, height
+
 TOP_PERCH_MARGIN_PX: int = 80
 
 ANIMATION_INTERVAL_MS: int = 120

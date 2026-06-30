@@ -51,7 +51,17 @@ from settings.persistence import (
     set_saved_pet_visible,
     set_saved_pets_paused,
 )
-from settings.sprites import discover_sprite_packs, get_pet_sprites_dir, iter_sprite_file_entries, pet_has_sprites, sprite_pack_display_name
+from settings.sprites import (
+    discover_sprite_packs,
+    effective_pet_size,
+    get_pet_sprites_dir,
+    get_sprite_scale_percent,
+    iter_sprite_file_entries,
+    pet_has_sprites,
+    set_saved_pet_sprite_scale_percent,
+    set_saved_pet_sprites_dir,
+    sprite_pack_display_name,
+)
 from settings.core import format_speech_bubble_text  # noqa: F401 — re-export
 
 __all__ = [name for name in globals() if not name.startswith("_")]
