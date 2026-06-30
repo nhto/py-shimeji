@@ -61,6 +61,32 @@ def get_saved_pet_sprites_dir(pet_index: int) -> Path | None:
     return path if path.is_dir() else None
 
 
+def get_saved_pet_sprite_scale_percent(pet_index: int) -> int | None:
+    """Return a persisted sprite scale percentage, or None for the default."""
+    raw = pet_settings_entry(pet_index).get("sprite_scale_percent")
+    if raw is None:
+        return None
+    try:
+        return int(raw)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
+def set_saved_pet_sprite_scale_percent(pet_index: int, scale_percent: int) -> None:
+    """Persist the sprite scale percentage for a pet."""
+    data = load_app_settings()
+    pets = data.setdefault("pets", {})
+    if not isinstance(pets, dict):
+        pets = {}
+        data["pets"] = pets
+    entry = pets.setdefault(str(pet_index), {})
+    if not isinstance(entry, dict):
+        entry = {}
+        pets[str(pet_index)] = entry
+    entry["sprite_scale_percent"] = scale_percent
+    save_app_settings(data)
+
+
 def set_saved_pet_sprites_dir(pet_index: int, sprites_dir: Path) -> None:
     """Persist the sprite folder for a pet."""
     data = load_app_settings()

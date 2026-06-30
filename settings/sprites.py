@@ -5,18 +5,46 @@ from __future__ import annotations
 from pathlib import Path
 
 from i18n.locale import sprite_state_label
+from settings.core import (
+    SPRITE_SCALE_PERCENT_DEFAULT,
+    SPRITE_SCALE_PERCENT_MAX,
+    SPRITE_SCALE_PERCENT_MIN,
+    effective_pet_size,
+)
 from settings.paths import SPRITE_FILES, SPRITE_OPTIONAL_STATES, SPRITES_ROOT
-from settings.persistence import get_saved_pet_sprites_dir, set_saved_pet_sprites_dir
+from settings.persistence import (
+    clamp_int,
+    get_saved_pet_sprite_scale_percent,
+    get_saved_pet_sprites_dir,
+    set_saved_pet_sprite_scale_percent,
+    set_saved_pet_sprites_dir,
+)
 
 __all__ = [
     "discover_sprite_packs",
+    "effective_pet_size",
     "get_pet_sprites_dir",
+    "get_sprite_scale_percent",
     "iter_sprite_file_entries",
     "pet_has_sprites",
+    "set_saved_pet_sprite_scale_percent",
     "set_saved_pet_sprites_dir",
     "sprite_pack_display_name",
     "sprite_state_label",
 ]
+
+
+def get_sprite_scale_percent(pet_index: int) -> int:
+    """Return the persisted sprite scale for a pet (50–200%, default 100%)."""
+    raw = get_saved_pet_sprite_scale_percent(pet_index)
+    if raw is None:
+        return SPRITE_SCALE_PERCENT_DEFAULT
+    return clamp_int(
+        raw,
+        SPRITE_SCALE_PERCENT_MIN,
+        SPRITE_SCALE_PERCENT_MAX,
+        SPRITE_SCALE_PERCENT_DEFAULT,
+    )
 
 
 def get_pet_sprites_dir(pet_index: int) -> Path:

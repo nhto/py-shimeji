@@ -21,11 +21,12 @@ class HorizontalLedge:
     right: int  # right edge of the ledge in screen coordinates
     stand_y: int  # pet widget top-left y when standing here
     ledge_id: str
+    pet_width: int = PET_WIDTH
     hwnd: int = 0  # 0 for the screen floor
 
     def max_pet_x(self) -> int:
         """Rightmost valid pet top-left x on this ledge."""
-        return self.right - PET_WIDTH + 1
+        return self.right - self.pet_width + 1
 
     def contains_pet_x(self, pet_x: int) -> bool:
         return self.left <= pet_x <= self.max_pet_x()
@@ -40,12 +41,13 @@ class VerticalLedge:
     bottom: int
     side: Side
     hwnd: int
+    pet_width: int = PET_WIDTH
 
     def pet_x(self) -> int:
         overlap = 6
         # edge_x is Win32 RECT.right (exclusive) on the right; both sides hug the
         # window edge with a small outward overlap.
-        return self.edge_x - PET_WIDTH + overlap
+        return self.edge_x - self.pet_width + overlap
 
     def pet_overlaps_height(self, pet_top: int, pet_bottom: int) -> bool:
         margin = 8
@@ -62,9 +64,16 @@ class SurfaceTracker:
     def __init__(self) -> None:
         self._horizontal: list[HorizontalLedge] = []
         self._vertical: list[VerticalLedge] = []
+        self._pet_width = PET_WIDTH
+        self._pet_height = PET_HEIGHT
         self._enabled = sys.platform == "win32"
         if self._enabled:
             self._init_win32()
+
+    def set_pet_dimensions(self, pet_width: int, pet_height: int) -> None:
+        """Update the pet footprint used for ledge geometry and collision."""
+        self._pet_width = max(1, pet_width)
+        self._pet_height = max(1, pet_height)
 
     def refresh(
         self, play_area: QRect, exclude_hwnds: int | set[int] | None = None
@@ -79,8 +88,9 @@ class SurfaceTracker:
         floor = HorizontalLedge(
             left=play_area.left(),
             right=play_area.right(),
-            stand_y=play_area.bottom() - PET_HEIGHT + 1,
+            stand_y=play_area.bottom() - self._pet_height + 1,
             ledge_id="screen",
+            pet_width=self._pet_width,
         )
         self._horizontal = [floor]
         self._vertical = []
@@ -100,7 +110,7 @@ class SurfaceTracker:
             # walk off the visible screen edge on partially off-screen windows.
             ledge_left = max(rect.left, play_area.left())
             ledge_right = min(rect.right - 1, play_area.right())
-            if ledge_right - ledge_left < PET_WIDTH - 1:
+            if ledge_right - ledge_left < self._pet_width - 1:
                 continue
 
             ledge_top = max(rect.top, play_area.top())
@@ -113,6 +123,7 @@ class SurfaceTracker:
                         bottom=ledge_bottom,
                         side="left",
                         hwnd=hwnd,
+                        pet_width=self._pet_width,
                     )
                 )
                 self._vertical.append(
@@ -122,16 +133,17 @@ class SurfaceTracker:
                         bottom=ledge_bottom,
                         side="right",
                         hwnd=hwnd,
+                        pet_width=self._pet_width,
                     )
                 )
 
             # Skip title bars that would clamp to the screen top; they create
             # bogus perches (e.g. maximized windows) where the pet gets stuck.
-            min_window_top = play_area.top() + PET_HEIGHT - 1
+            min_window_top = play_area.top() + self._pet_height - 1
             if rect.top < min_window_top:
                 continue
 
-            stand_y = rect.top - PET_HEIGHT + 1
+            stand_y = rect.top - self._pet_height + 1
             if stand_y < play_area.top() + TOP_PERCH_MARGIN_PX:
                 continue
 
@@ -141,6 +153,7 @@ class SurfaceTracker:
                     right=ledge_right,
                     stand_y=stand_y,
                     ledge_id=f"hwnd:{hwnd}",
+                    pet_width=self._pet_width,
                     hwnd=hwnd,
                 )
             )
@@ -155,18 +168,19 @@ class SurfaceTracker:
         return HorizontalLedge(
             left=play_area.left(),
             right=play_area.right(),
-            stand_y=play_area.bottom() - PET_HEIGHT + 1,
+            stand_y=play_area.bottom() - self._pet_height + 1,
             ledge_id="screen",
+            pet_width=self._pet_width,
         )
 
     def find_ledge_at(self, pet_x: int, pet_y: int) -> HorizontalLedge | None:
         """Return the highest ledge supporting the pet at the given position."""
-        feet_y = pet_y + PET_HEIGHT - 1
+        feet_y = pet_y + self._pet_height - 1
         best: HorizontalLedge | None = None
         for ledge in self._horizontal:
             if not ledge.contains_pet_x(pet_x):
                 continue
-            surface_feet = ledge.stand_y + PET_HEIGHT - 1
+            surface_feet = ledge.stand_y + self._pet_height - 1
             if abs(feet_y - surface_feet) <= 4:
                 if best is None or ledge.stand_y < best.stand_y:
                     best = ledge
@@ -180,14 +194,14 @@ class SurfaceTracker:
         exclude_ledge_id: str | None = None,
     ) -> HorizontalLedge | None:
         """Pick the topmost ledge the pet would land on while falling."""
-        current_feet = pet_y + PET_HEIGHT - 1
+        current_feet = pet_y + self._pet_height - 1
         best: HorizontalLedge | None = None
         for ledge in self._horizontal:
             if exclude_ledge_id is not None and ledge.ledge_id == exclude_ledge_id:
                 continue
             if not ledge.contains_pet_x(pet_x):
                 continue
-            surface_feet = ledge.stand_y + PET_HEIGHT - 1
+            surface_feet = ledge.stand_y + self._pet_height - 1
             # Require feet to be strictly above the surface so a fall starting on
             # a ledge does not re-land on the same perch on the first tick.
             if current_feet < surface_feet <= next_feet_y:
@@ -213,8 +227,8 @@ class SurfaceTracker:
             if not ledge.pet_overlaps_height(pet_top, pet_bottom):
                 continue
             if direction > 0 and ledge.side == "left":
-                if next_x + PET_WIDTH >= ledge.edge_x - tolerance:
-                    if pet_x + PET_WIDTH <= ledge.edge_x + tolerance:
+                if next_x + self._pet_width >= ledge.edge_x - tolerance:
+                    if pet_x + self._pet_width <= ledge.edge_x + tolerance:
                         candidates.append(ledge)
             elif direction < 0 and ledge.side == "right":
                 if next_x <= ledge.edge_x + tolerance:
