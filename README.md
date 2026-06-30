@@ -194,7 +194,20 @@ A copy of `.env.example` is placed next to the executable so recipients can conf
 ```
 py-shimeji/
 ├── main.py          # Application entry point
-├── config.py        # Constants, paths, timing, chat settings
+├── config.py        # Backward-compatible re-exports (prefer settings/ and i18n/)
+├── settings/
+│   ├── paths.py     # Project paths, .env loading
+│   ├── core.py      # Gameplay constants and speech-bubble limits
+│   ├── persistence.py  # .app_settings.json read/write
+│   ├── behavior.py  # Speed, chase, pet count, ambient speech
+│   ├── outlook.py   # Outlook integration settings
+│   ├── chat.py      # OpenRouter API key and chat model/language
+│   ├── hotkeys.py   # Global hotkey bindings
+│   └── sprites.py   # Sprite pack discovery
+├── i18n/
+│   ├── strings.py   # Localized UI label dictionaries
+│   └── locale.py    # localized(), language pickers
+├── tests/           # pytest unit tests
 ├── states.py        # PetState enum and FSM
 ├── pet_window.py    # Window, input, physics, rendering
 ├── surfaces.py      # Walkable ledges from desktop windows (Windows)
@@ -231,10 +244,19 @@ py-shimeji/
 │       ├── pet_1/   # PNG set for pet 1
 │       └── pet_2/   # PNG set for pet 2
 ├── requirements.txt
-├── requirements-dev.txt  # PyInstaller and other build tools
+├── requirements-dev.txt  # PyInstaller, pytest, and other dev tools
 ├── .env.example     # Template for OPENROUTER_API_KEY
 └── README.md
 ```
+
+### Unit tests
+
+```powershell
+pip install -r requirements-dev.txt
+.venv\Scripts\python -m pytest tests/ -v
+```
+
+Coverage includes pet state transitions, hotkey parsing, Outlook mail dedup/snooze, and speech-bubble text formatting.
 
 ## Sprites (optional)
 
@@ -334,7 +356,7 @@ By default the app spawns **two** desktop pets. You can change the count (1–4)
 - **FALLING** — gravity until the nearest ledge or floor (`QScreen.availableGeometry()` respects taskbar/dock)
 - **DRAGGED** — user-controlled; normal animation pauses while held
 
-Cursor chase tuning constants live in `config.py` and can be adjusted from **Pet behavior...** in the tray.
+Cursor chase tuning constants live in `settings/core.py` and `settings/behavior.py` and can be adjusted from **Pet behavior...** in the tray.
 
 ## Chat with Bubu
 
