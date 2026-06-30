@@ -71,8 +71,10 @@ if TYPE_CHECKING:
 
 def _build_tray_icon() -> QIcon:
     """Use the first pet's idle sprite when available; otherwise draw a fallback blob."""
-    sprite_path = get_pet_sprites_dir(0) / "idle_1.png"
-    if sprite_path.is_file():
+    from shimeji_pack import preview_sprite_path
+
+    sprite_path = preview_sprite_path(get_pet_sprites_dir(0))
+    if sprite_path is not None and sprite_path.is_file():
         icon = QIcon(str(sprite_path))
         if not icon.isNull():
             return icon
@@ -404,15 +406,16 @@ class SystemTray:
 
     def _make_change_sprites_handler(self, pet: PetWindow, index: int):
         def change_sprites() -> None:
-            folder = open_sprite_picker_dialog(
+            result = open_sprite_picker_dialog(
                 index,
                 pet.sprites_dir,
                 parent=self._pets[0] if self._pets else None,
                 pet=pet,
             )
-            if folder is None:
+            if result is None:
                 return
-            pet.reload_sprites(folder)
+            folder, scale_percent = result
+            pet.reload_sprites(folder, sprite_scale_percent=scale_percent)
             if pet.has_sprites:
                 pet.show()
                 set_saved_pet_visible(index - 1, True)

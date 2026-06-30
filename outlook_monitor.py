@@ -14,7 +14,6 @@ from config import (
     MEETING_LOCATION_MAX_CHARS,
     MEETING_SNOOZE_MINUTES,
     OUTLOOK_NOTIFY_PET_FIRST_VISIBLE,
-    format_speech_bubble_text,
     get_outlook_calendar_enabled,
     get_outlook_calendar_poll_interval_sec,
     get_outlook_enabled,
@@ -44,6 +43,7 @@ from outlook_poll_worker import (
 from outlook_actions import join_meeting, open_calendar_event, open_mail
 from outlook_text import truncate_notification_line
 from pet_window import PetWindow
+from settings.core import format_speech_bubble_text
 
 TrayNotifier = Callable[[str, str], None]
 _logger = logging.getLogger(__name__)

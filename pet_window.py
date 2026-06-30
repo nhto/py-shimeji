@@ -41,12 +41,9 @@ from config import (
     PEER_NUDGE_PX,
     PEER_SIT_ON_BUMP_CHANCE,
     PET_FALLBACK_PALETTES,
-    PET_HEIGHT,
-    PET_WIDTH,
     SPRITE_FILES,
     SURFACE_REFRESH_MS,
     TOP_PERCH_MARGIN_PX,
-    format_speech_bubble_text,
     get_ambient_phrase,
     get_ambient_speech_enabled,
     get_cursor_chase_chance,
@@ -54,11 +51,16 @@ from config import (
     get_effective_gravity_px,
     get_effective_walk_speed_px,
     get_move_tick_ms,
+    get_pet_sprites_dir,
+    get_sprite_scale_percent,
+    effective_pet_size,
+    set_saved_pet_sprite_scale_percent,
     set_saved_pet_sprites_dir,
     AMBIENT_SPEECH_EVENT_CHANCE,
     AMBIENT_SPEECH_INTERVAL_MAX_MS,
     AMBIENT_SPEECH_INTERVAL_MIN_MS,
 )
+from settings.core import format_speech_bubble_text
 from speech_bubble import SpeechBubbleWindow
 from states import PetState, PetStateMachine
 from surfaces import HorizontalLedge, SurfaceTracker, VerticalLedge
@@ -114,27 +116,27 @@ def _key_out_background(image: QImage, threshold: int = 200) -> QImage:
     return image
 
 
-def _prepare_sprite(path: Path) -> QPixmap | None:
+def _prepare_sprite(path: Path, width: int, height: int) -> QPixmap | None:
     """Load, scale, de-background, and center a sprite frame."""
     image = QImage(str(path))
     if image.isNull():
         return None
 
     scaled = image.scaled(
-        PET_WIDTH,
-        PET_HEIGHT,
+        width,
+        height,
         Qt.AspectRatioMode.KeepAspectRatio,
         Qt.TransformationMode.SmoothTransformation,
     )
     scaled = _key_out_background(scaled)
 
-    canvas = QImage(PET_WIDTH, PET_HEIGHT, QImage.Format.Format_ARGB32)
+    canvas = QImage(width, height, QImage.Format.Format_ARGB32)
     canvas.fill(Qt.GlobalColor.transparent)
 
     painter = QPainter(canvas)
     painter.drawImage(
-        (PET_WIDTH - scaled.width()) // 2,
-        (PET_HEIGHT - scaled.height()) // 2,
+        (width - scaled.width()) // 2,
+        (height - scaled.height()) // 2,
         scaled,
     )
     painter.end()
@@ -146,23 +148,43 @@ def _prepare_sprite(path: Path) -> QPixmap | None:
 class SpriteCache:
     """Loads sprite frames from disk; missing files are represented as None."""
 
-    def __init__(self, assets_dir: Path) -> None:
+    def __init__(self, assets_dir: Path, *, width: int, height: int) -> None:
         self._assets_dir = assets_dir
+        self._width = width
+        self._height = height
         self._cache: dict[str, list[QPixmap | None]] = {}
         self._load_all()
 
     def _load_all(self) -> None:
+        from shimeji_pack import resolve_sprite_frame_paths
+
+        frame_paths = resolve_sprite_frame_paths(self._assets_dir)
         for group, filenames in SPRITE_FILES.items():
+            paths = frame_paths.get(group, [])
             frames: list[QPixmap | None] = []
-            for name in filenames:
-                path = self._assets_dir / name
-                frames.append(_prepare_sprite(path) if path.is_file() else None)
+            for index, _name in enumerate(filenames):
+                path = paths[index] if index < len(paths) else None
+                frames.append(
+                    _prepare_sprite(path, self._width, self._height)
+                    if path is not None and path.is_file()
+                    else None
+                )
             self._cache[group] = frames
 
-    def reload(self, assets_dir: Path | None = None) -> None:
-        """Reload sprite frames from disk (optionally from a new folder)."""
+    def reload(
+        self,
+        assets_dir: Path | None = None,
+        *,
+        width: int | None = None,
+        height: int | None = None,
+    ) -> None:
+        """Reload sprite frames from disk (optionally from a new folder or size)."""
         if assets_dir is not None:
             self._assets_dir = assets_dir
+        if width is not None:
+            self._width = width
+        if height is not None:
+            self._height = height
         self._cache.clear()
         self._load_all()
 
@@ -217,18 +239,25 @@ class PetWindow(QWidget):
         self._exclude_hwnds = exclude_hwnds if exclude_hwnds is not None else set()
         self._sprites_dir = sprites_dir or get_pet_sprites_dir(pet_index)
         self._start_fraction = (pet_index + 1) / (self._pet_count + 1)
+        self._sprite_scale_percent = get_sprite_scale_percent(pet_index)
+        self._pet_width, self._pet_height = effective_pet_size(self._sprite_scale_percent)
         palette = PET_FALLBACK_PALETTES[pet_index % len(PET_FALLBACK_PALETTES)]
         self._fallback_body = palette["body"]
         self._fallback_outline = palette["outline"]
         self._fallback_eye = palette["eye"]
         self._fallback_pupil = palette["pupil"]
 
-        self._sprites = SpriteCache(self._sprites_dir)
+        self._sprites = SpriteCache(
+            self._sprites_dir,
+            width=self._pet_width,
+            height=self._pet_height,
+        )
         self._frame_index: int = 0
         self._drag_offset = QPoint(0, 0)
         self._is_dragging: bool = False
         self._play_area: QRect = QRect()
         self._surfaces = SurfaceTracker()
+        self._surfaces.set_pet_dimensions(self._pet_width, self._pet_height)
         self._active_ledge: HorizontalLedge | None = None
         self._fall_exclude_ledge_id: str | None = None
         self._climb_ledge: VerticalLedge | None = None
@@ -294,13 +323,77 @@ class PetWindow(QWidget):
         else:
             self._leave_motion_pause()
 
-    def reload_sprites(self, sprites_dir: Path) -> None:
+    @property
+    def sprite_scale_percent(self) -> int:
+        return self._sprite_scale_percent
+
+    def reload_sprites(
+        self,
+        sprites_dir: Path,
+        *,
+        sprite_scale_percent: int | None = None,
+    ) -> None:
         """Load a new PNG set for this pet and refresh the window."""
+        if sprite_scale_percent is not None:
+            from settings.core import (
+                SPRITE_SCALE_PERCENT_DEFAULT,
+                SPRITE_SCALE_PERCENT_MAX,
+                SPRITE_SCALE_PERCENT_MIN,
+            )
+            from settings.persistence import clamp_int
+
+            self._sprite_scale_percent = clamp_int(
+                sprite_scale_percent,
+                SPRITE_SCALE_PERCENT_MIN,
+                SPRITE_SCALE_PERCENT_MAX,
+                SPRITE_SCALE_PERCENT_DEFAULT,
+            )
+            self._update_pet_dimensions()
+            set_saved_pet_sprite_scale_percent(self._pet_index, self._sprite_scale_percent)
         self._sprites_dir = sprites_dir
-        self._sprites.reload(sprites_dir)
+        self._sprites.reload(
+            sprites_dir,
+            width=self._pet_width,
+            height=self._pet_height,
+        )
         self._frame_index = 0
         set_saved_pet_sprites_dir(self._pet_index, sprites_dir)
+        self._refresh_surfaces()
+        pos = self.pos()
+        self.move(*self._clamp_position(pos.x(), pos.y()))
         self.update()
+
+    def apply_sprite_scale(self, scale_percent: int) -> None:
+        """Resize the pet widget and reload sprites at the new scale."""
+        from settings.core import (
+            SPRITE_SCALE_PERCENT_DEFAULT,
+            SPRITE_SCALE_PERCENT_MAX,
+            SPRITE_SCALE_PERCENT_MIN,
+        )
+        from settings.persistence import clamp_int
+
+        scale_percent = clamp_int(
+            scale_percent,
+            SPRITE_SCALE_PERCENT_MIN,
+            SPRITE_SCALE_PERCENT_MAX,
+            SPRITE_SCALE_PERCENT_DEFAULT,
+        )
+        if scale_percent == self._sprite_scale_percent:
+            return
+        self._sprite_scale_percent = scale_percent
+        self._update_pet_dimensions()
+        self._sprites.reload(width=self._pet_width, height=self._pet_height)
+        set_saved_pet_sprite_scale_percent(self._pet_index, self._sprite_scale_percent)
+        self._frame_index = 0
+        self._refresh_surfaces()
+        pos = self.pos()
+        self.move(*self._clamp_position(pos.x(), pos.y()))
+        self.update()
+
+    def _update_pet_dimensions(self) -> None:
+        self._pet_width, self._pet_height = effective_pet_size(self._sprite_scale_percent)
+        self.setFixedSize(self._pet_width, self._pet_height)
+        self._surfaces.set_pet_dimensions(self._pet_width, self._pet_height)
 
     def show_speech_bubble(
         self,
@@ -522,7 +615,7 @@ class PetWindow(QWidget):
     # ------------------------------------------------------------------
 
     def _setup_window(self) -> None:
-        self.setFixedSize(PET_WIDTH, PET_HEIGHT)
+        self.setFixedSize(self._pet_width, self._pet_height)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setAutoFillBackground(False)
@@ -574,10 +667,10 @@ class PetWindow(QWidget):
     def _place_on_floor(self) -> None:
         self._refresh_play_area()
         x = self._play_area.left() + int(
-            (self._play_area.width() - PET_WIDTH) * self._start_fraction
+            (self._play_area.width() - self._pet_width) * self._start_fraction
         )
         x = self._clamp_x(x)
-        y = self._play_area.bottom() - PET_HEIGHT + 1
+        y = self._play_area.bottom() - self._pet_height + 1
         self.move(x, y)
 
     def _refresh_play_area(self) -> None:
@@ -619,8 +712,8 @@ class PetWindow(QWidget):
         """Return a screen point that stays on the pet's current display."""
         frame = self.frameGeometry()
         return QPoint(
-            frame.left() + PET_WIDTH // 2,
-            frame.top() + PET_HEIGHT - 1,
+            frame.left() + self._pet_width // 2,
+            frame.top() + self._pet_height - 1,
         )
 
     def _nearest_screen(self, point: QPoint) -> QScreen | None:
@@ -652,7 +745,7 @@ class PetWindow(QWidget):
         return self._play_area.left()
 
     def _max_pet_x(self) -> int:
-        return self._play_area.right() - PET_WIDTH + 1
+        return self._play_area.right() - self._pet_width + 1
 
     def _clamp_x(self, x: int) -> int:
         return max(self._min_pet_x(), min(x, self._max_pet_x()))
@@ -661,7 +754,7 @@ class PetWindow(QWidget):
         return self._play_area.top()
 
     def _max_pet_y(self) -> int:
-        return self._play_area.bottom() - PET_HEIGHT + 1
+        return self._play_area.bottom() - self._pet_height + 1
 
     def _clamp_y(self, y: int) -> int:
         return max(self._min_pet_y(), min(y, self._max_pet_y()))
@@ -815,7 +908,7 @@ class PetWindow(QWidget):
         direction = self._fsm.direction
         new_x = pos.x() + get_effective_walk_speed_px() * direction
         pet_top = pos.y()
-        pet_bottom = pos.y() + PET_HEIGHT
+        pet_bottom = pos.y() + self._pet_height
 
         ledge = self._surfaces.find_ledge_at(pos.x(), pos.y())
         if ledge is None:
@@ -899,7 +992,7 @@ class PetWindow(QWidget):
         cursor = QCursor.pos()
         if not self._is_cursor_on_same_ledge(cursor):
             return
-        pet_center_x = self.pos().x() + PET_WIDTH // 2
+        pet_center_x = self.pos().x() + self._pet_width // 2
         if abs(cursor.x() - pet_center_x) <= CURSOR_SIT_DISTANCE_PX:
             return
         self._cursor_still_ms = 0
@@ -921,7 +1014,7 @@ class PetWindow(QWidget):
             self._end_cursor_chase()
             return
 
-        pet_center_x = self.pos().x() + PET_WIDTH // 2
+        pet_center_x = self.pos().x() + self._pet_width // 2
         dx = cursor.x() - pet_center_x
         self._track_cursor_stillness(cursor)
 
@@ -973,7 +1066,7 @@ class PetWindow(QWidget):
         if pet_screen is None or cursor_screen != pet_screen:
             return False
 
-        feet_y = pos.y() + PET_HEIGHT
+        feet_y = pos.y() + self._pet_height
         if abs(cursor.y() - feet_y) > CURSOR_Y_TOLERANCE_PX:
             return False
 
@@ -1079,7 +1172,7 @@ class PetWindow(QWidget):
         if self._climb_direction < 0:
             new_y = max(pos.y() - get_effective_climb_speed_px(), self._min_pet_y())
             climb_top = max(climb.top, self._play_area.top())
-            if new_y <= climb_top - PET_HEIGHT + 8:
+            if new_y <= climb_top - self._pet_height + 8:
                 top_ledge = self._horizontal_ledge_for_hwnd(climb.hwnd)
                 if top_ledge is None:
                     self._start_fall()
@@ -1103,7 +1196,7 @@ class PetWindow(QWidget):
             return
 
         new_y = pos.y() + get_effective_climb_speed_px()
-        if new_y + PET_HEIGHT >= climb.bottom - 4:
+        if new_y + self._pet_height >= climb.bottom - 4:
             floor = self._surfaces.floor_ledge(self._play_area)
             self._active_ledge = floor
             land_x = self._clamp_x(
@@ -1145,7 +1238,7 @@ class PetWindow(QWidget):
         self._surfaces.refresh(self._play_area, self._exclude_hwnds)
         pos = self.pos()
         new_y = pos.y() + get_effective_gravity_px()
-        next_feet_y = new_y + PET_HEIGHT - 1
+        next_feet_y = new_y + self._pet_height - 1
         landing = self._surfaces.find_landing_ledge(
             pos.x(),
             pos.y(),
@@ -1187,7 +1280,7 @@ class PetWindow(QWidget):
                     None,
                 )
                 if excluded is not None:
-                    excluded_feet = excluded.stand_y + PET_HEIGHT - 1
+                    excluded_feet = excluded.stand_y + self._pet_height - 1
                     if next_feet_y > excluded_feet:
                         self._fall_exclude_ledge_id = None
 
@@ -1293,10 +1386,10 @@ class PetWindow(QWidget):
             self.setMask(mask)
 
     def _paint_sprite(self, painter: QPainter, pixmap: QPixmap) -> None:
-        target = QRect(0, 0, PET_WIDTH, PET_HEIGHT)
+        target = QRect(0, 0, self._pet_width, self._pet_height)
         if self._fsm.direction < 0:
             painter.save()
-            painter.translate(PET_WIDTH, 0)
+            painter.translate(self._pet_width, 0)
             painter.scale(-1, 1)
             painter.drawPixmap(target, pixmap)
             painter.restore()
@@ -1305,8 +1398,8 @@ class PetWindow(QWidget):
 
     def _paint_fallback(self, painter: QPainter) -> None:
         """Draw a simple cartoon blob when sprite PNGs are missing."""
-        cx, cy = PET_WIDTH / 2, PET_HEIGHT / 2
-        radius = min(PET_WIDTH, PET_HEIGHT) * 0.38
+        cx, cy = self._pet_width / 2, self._pet_height / 2
+        radius = min(self._pet_width, self._pet_height) * 0.38
 
         body = QColor(self._fallback_body)
         outline = QColor(self._fallback_outline)

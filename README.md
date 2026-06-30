@@ -194,7 +194,20 @@ A copy of `.env.example` is placed next to the executable so recipients can conf
 ```
 py-shimeji/
 ├── main.py          # Application entry point
-├── config.py        # Constants, paths, timing, chat settings
+├── config.py        # Backward-compatible re-exports (prefer settings/ and i18n/)
+├── settings/
+│   ├── paths.py     # Project paths, .env loading
+│   ├── core.py      # Gameplay constants and speech-bubble limits
+│   ├── persistence.py  # .app_settings.json read/write
+│   ├── behavior.py  # Speed, chase, pet count, ambient speech
+│   ├── outlook.py   # Outlook integration settings
+│   ├── chat.py      # OpenRouter API key and chat model/language
+│   ├── hotkeys.py   # Global hotkey bindings
+│   └── sprites.py   # Sprite pack discovery
+├── i18n/
+│   ├── strings.py   # Localized UI label dictionaries
+│   └── locale.py    # localized(), language pickers
+├── tests/           # pytest unit tests
 ├── states.py        # PetState enum and FSM
 ├── pet_window.py    # Window, input, physics, rendering
 ├── surfaces.py      # Walkable ledges from desktop windows (Windows)
@@ -206,6 +219,7 @@ py-shimeji/
 ├── behavior_settings_dialog.py  # Speed, chase, pet count, ambient speech
 ├── dialog_theme.py  # Shared styling for dialogs and chat
 ├── sprite_picker_dialog.py  # Visual sprite pack picker
+├── shimeji_pack.py          # Shimeji actions.xml compatibility layer
 ├── outlook_models.py        # MailItem / CalendarEvent dataclasses
 ├── outlook_com_client.py    # Classic Outlook COM client (Windows)
 ├── outlook_com_constants.py # MAPI folder/property constants
@@ -222,6 +236,7 @@ py-shimeji/
 ├── scripts/
 │   ├── build.sh               # One-command build (Git Bash / Unix)
 │   ├── build.ps1              # One-command build (PowerShell)
+│   ├── convert_shimeji_pack.py  # Shimeji actions.xml → py-shimeji PNG converter
 │   ├── test_outlook_com.py    # Phase 0: Outlook COM feasibility check (Windows)
 │   └── demo_outlook_com_client.py  # Phase 1: inbox/calendar COM client demo
 ├── assets/
@@ -229,10 +244,19 @@ py-shimeji/
 │       ├── pet_1/   # PNG set for pet 1
 │       └── pet_2/   # PNG set for pet 2
 ├── requirements.txt
-├── requirements-dev.txt  # PyInstaller and other build tools
+├── requirements-dev.txt  # PyInstaller, pytest, and other dev tools
 ├── .env.example     # Template for OPENROUTER_API_KEY
 └── README.md
 ```
+
+### Unit tests
+
+```powershell
+pip install -r requirements-dev.txt
+.venv\Scripts\python -m pytest tests/ -v
+```
+
+Coverage includes pet state transitions, hotkey parsing, Outlook mail dedup/snooze, and speech-bubble text formatting.
 
 ## Sprites (optional)
 
@@ -265,6 +289,26 @@ Expected filenames in each folder:
 If files are missing for a pet, that pet stays **hidden on startup** and uses a colored vector fallback only if you show it from the tray.
 
 You can also change a pet's sprites at runtime from the **system tray** menu: **Change Pet N sprites...** opens a folder picker, reloads that pet, and shows it when PNGs are found.
+
+### Community Shimeji packs (actions.xml)
+
+Many [Shimeji-EE](https://github.com/Gohan/shimeji-ee) sprite packs use `conf/actions.xml` with custom frame names (`shime1.png`, `shime2.png`, …) instead of py-shimeji's `idle_1.png` / `walk_1.png` layout. py-shimeji loads these packs directly — point **Change Pet N sprites...** at the pack folder (the one that contains `conf/actions.xml` and the PNG files).
+
+| py-shimeji state | Mapped from Shimeji actions (first match) |
+|------------------|-------------------------------------------|
+| Idle             | `Stand`, `Look`, …                        |
+| Walk / climb     | `Walk`, `Run`, `Dash`, …                  |
+| Sit              | `Sit`, `Sprawl`, `Sleep`, …               |
+| Fall             | `Falling`, `GrabWall`, …                  |
+| Drag             | `Pinched`, `Resisting`, …                 |
+
+To permanently convert a pack to native PNG names (for sharing or editing), use the **Convert to py-shimeji PNGs…** button in the sprite picker, or run:
+
+```bash
+python scripts/convert_shimeji_pack.py "C:\path\to\ShimejiPack"
+```
+
+Converted packs are written to `assets/sprites/imported/<pack-name>/` and appear in the sprite picker grid.
 
 ## Controls
 
@@ -312,7 +356,7 @@ By default the app spawns **two** desktop pets. You can change the count (1–4)
 - **FALLING** — gravity until the nearest ledge or floor (`QScreen.availableGeometry()` respects taskbar/dock)
 - **DRAGGED** — user-controlled; normal animation pauses while held
 
-Cursor chase tuning constants live in `config.py` and can be adjusted from **Pet behavior...** in the tray.
+Cursor chase tuning constants live in `settings/core.py` and `settings/behavior.py` and can be adjusted from **Pet behavior...** in the tray.
 
 ## Chat with Bubu
 
