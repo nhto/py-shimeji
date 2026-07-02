@@ -41,6 +41,19 @@ from config import (
     TRAY_PREFERENCE_LABELS,
     TRAY_PREFERENCES_SAVED_MESSAGE_LABELS,
     TRAY_QUIT_LABELS,
+    TRAY_CHECK_UPDATES_LABELS,
+    TRAY_CHECKING_UPDATES_LABELS,
+    TRAY_INSTALL_UPDATE_LABELS,
+    TRAY_SKIP_UPDATE_LABELS,
+    TRAY_UPDATE_AVAILABLE_TITLE_LABELS,
+    TRAY_UPDATE_AVAILABLE_MESSAGE_LABELS,
+    TRAY_UPDATE_UP_TO_DATE_TITLE_LABELS,
+    TRAY_UPDATE_UP_TO_DATE_MESSAGE_LABELS,
+    TRAY_UPDATE_CHECK_FAILED_TITLE_LABELS,
+    TRAY_UPDATE_CHECK_FAILED_MESSAGE_LABELS,
+    TRAY_UPDATE_INSTALLING_MESSAGE_LABELS,
+    TRAY_UPDATE_INSTALL_FAILED_MESSAGE_LABELS,
+    TRAY_TOOLTIP_VERSION_LABELS,
     TRAY_SHOW_PET_LABELS,
     TRAY_TOGGLE_ALL_PETS_TOOLTIP_LABELS,
     TRAY_TOOLTIP_OUTLOOK_UNREAD_LABELS,
@@ -62,6 +75,9 @@ from hotkeys import GlobalHotkeyManager
 from outlook_settings_dialog import open_outlook_settings_dialog
 from pet_window import PetWindow
 from sprite_picker_dialog import open_sprite_picker_dialog
+from update import UpdateInfo
+from update_ui import UpdateController
+from version import __version__
 
 if TYPE_CHECKING:
     from display import DisplayChangeWatcher
@@ -127,8 +143,12 @@ class SystemTray:
         self._outlook_settings_action: QAction | None = None
         self._pause_pets_action: QAction | None = None
         self._click_through_action: QAction | None = None
+        self._check_updates_action: QAction | None = None
+        self._install_update_action: QAction | None = None
+        self._skip_update_action: QAction | None = None
         self._quit_action: QAction | None = None
         self._hotkeys = GlobalHotkeyManager(parent=pets[0] if pets else None)
+        self._updates = UpdateController(self)
 
         self._menu = self._build_menu()
         self._menu_host_pet: PetWindow | None = None
@@ -150,6 +170,11 @@ class SystemTray:
                 QSystemTrayIcon.MessageIcon.Information,
                 8_000,
             )
+
+        if self._updates.enabled:
+            from PyQt6.QtCore import QTimer
+
+            QTimer.singleShot(8_000, self._updates.maybe_check_on_startup)
 
     @staticmethod
     def _hotkey_hint(action: str) -> str:
@@ -230,6 +255,21 @@ class SystemTray:
         menu.addAction(self._click_through_action)
 
         menu.addSeparator()
+
+        if self._updates.enabled:
+            self._check_updates_action = QAction("", menu)
+            self._check_updates_action.triggered.connect(self._check_for_updates)
+            menu.addAction(self._check_updates_action)
+
+            self._install_update_action = QAction("", menu)
+            self._install_update_action.triggered.connect(self._install_update)
+            menu.addAction(self._install_update_action)
+
+            self._skip_update_action = QAction("", menu)
+            self._skip_update_action.triggered.connect(self._skip_update)
+            menu.addAction(self._skip_update_action)
+
+            menu.addSeparator()
 
         self._quit_action = QAction("", menu)
         self._quit_action.triggered.connect(self._quit)
@@ -321,6 +361,40 @@ class SystemTray:
             )
         if self._quit_action is not None:
             self._quit_action.setText(localized(TRAY_QUIT_LABELS, lang))
+        self.refresh_update_menu_state(language=lang)
+
+    def refresh_update_menu_state(self, language: str | None = None) -> None:
+        lang = language or get_chat_language()
+        if not self._updates.enabled:
+            return
+
+        checking = self._updates.is_checking
+        pending = self._updates.pending_update
+
+        if self._check_updates_action is not None:
+            label = (
+                localized(TRAY_CHECKING_UPDATES_LABELS, lang)
+                if checking
+                else localized(TRAY_CHECK_UPDATES_LABELS, lang)
+            )
+            self._check_updates_action.setText(label)
+            self._check_updates_action.setEnabled(not checking)
+
+        if self._install_update_action is not None:
+            visible = pending is not None and not checking
+            self._install_update_action.setVisible(visible)
+            if visible and pending is not None:
+                self._install_update_action.setText(
+                    localized(TRAY_INSTALL_UPDATE_LABELS, lang).format(
+                        version=pending.version
+                    )
+                )
+
+        if self._skip_update_action is not None:
+            visible = pending is not None and not checking
+            self._skip_update_action.setVisible(visible)
+            if visible:
+                self._skip_update_action.setText(localized(TRAY_SKIP_UPDATE_LABELS, lang))
 
     def _refresh_menu_state(self) -> None:
         language = get_chat_language()
@@ -378,7 +452,51 @@ class SystemTray:
                 localized(TRAY_TOOLTIP_OUTLOOK_UNAVAILABLE_LABELS, lang)
             )
         else:
-            self._tray.setToolTip("py-shimeji")
+            self._tray.setToolTip(
+                localized(TRAY_TOOLTIP_VERSION_LABELS, lang).format(version=__version__)
+            )
+
+    def show_update_message(self, kind: str, update: UpdateInfo | None = None) -> None:
+        language = get_chat_language()
+        if kind == "available" and update is not None:
+            self._tray.showMessage(
+                localized(TRAY_UPDATE_AVAILABLE_TITLE_LABELS, language),
+                localized(TRAY_UPDATE_AVAILABLE_MESSAGE_LABELS, language).format(
+                    version=update.version
+                ),
+                QSystemTrayIcon.MessageIcon.Information,
+                10_000,
+            )
+        elif kind == "up_to_date":
+            self._tray.showMessage(
+                localized(TRAY_UPDATE_UP_TO_DATE_TITLE_LABELS, language),
+                localized(TRAY_UPDATE_UP_TO_DATE_MESSAGE_LABELS, language).format(
+                    version=__version__
+                ),
+                QSystemTrayIcon.MessageIcon.Information,
+                6_000,
+            )
+        elif kind == "check_failed":
+            self._tray.showMessage(
+                localized(TRAY_UPDATE_CHECK_FAILED_TITLE_LABELS, language),
+                localized(TRAY_UPDATE_CHECK_FAILED_MESSAGE_LABELS, language),
+                QSystemTrayIcon.MessageIcon.Warning,
+                8_000,
+            )
+        elif kind == "installing":
+            self._tray.showMessage(
+                "py-shimeji",
+                localized(TRAY_UPDATE_INSTALLING_MESSAGE_LABELS, language),
+                QSystemTrayIcon.MessageIcon.Information,
+                6_000,
+            )
+        elif kind == "install_failed":
+            self._tray.showMessage(
+                "py-shimeji",
+                localized(TRAY_UPDATE_INSTALL_FAILED_MESSAGE_LABELS, language),
+                QSystemTrayIcon.MessageIcon.Warning,
+                10_000,
+            )
 
     def show_outlook_tray_message(self, title: str, body: str) -> None:
         self._tray.showMessage(
@@ -637,6 +755,18 @@ class SystemTray:
             QSystemTrayIcon.MessageIcon.Information,
             5_000,
         )
+
+    def _check_for_updates(self) -> None:
+        self._updates.check_for_updates(silent=False)
+
+    def _install_update(self) -> None:
+        self._updates.install_pending_update()
+
+    def _skip_update(self) -> None:
+        self._updates.skip_pending_update()
+
+    def quit_for_update(self) -> None:
+        self._quit()
 
     def _quit(self) -> None:
         self._hotkeys.shutdown()

@@ -43,6 +43,7 @@ from settings.hotkeys import HOTKEY_ACTIONS, get_hotkey_binding, set_hotkey_bind
 from settings.outlook import *  # noqa: F403
 from settings.paths import ASSETS_DIR, BUNDLE_ROOT, ENV_FILE_PATH, PROJECT_ROOT, SPRITES_ROOT
 from settings.paths import SPRITE_FILES, SPRITE_OPTIONAL_STATES
+from settings.update import get_skipped_version, get_update_check_enabled, set_skipped_version, set_update_check_enabled
 from settings.persistence import (
     get_saved_pet_visible,
     get_saved_pet_sprites_dir,
@@ -63,5 +64,6 @@ from settings.sprites import (
     sprite_pack_display_name,
 )
 from settings.core import format_speech_bubble_text  # noqa: F401 — re-export
+from version import GITHUB_REPO, __version__
 
 __all__ = [name for name in globals() if not name.startswith("_")]

@@ -147,7 +147,7 @@ class ChatWorker(QThread):
             headers={
                 "Authorization": f"Bearer {get_openrouter_api_key()}",
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://github.com/py-shimeji",
+                "HTTP-Referer": "https://github.com/nhto/py-shimeji",
                 "X-Title": "py-shimeji",
             },
         )

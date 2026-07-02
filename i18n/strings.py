@@ -369,6 +369,84 @@ TRAY_QUIT_LABELS: dict[str, str] = {
     "zh-Hant": "退出",
 }
 
+TRAY_CHECK_UPDATES_LABELS: dict[str, str] = {
+    "en": "Check for updates...",
+    "zh-Hans": "检查更新...",
+    "zh-Hant": "檢查更新...",
+}
+
+TRAY_CHECKING_UPDATES_LABELS: dict[str, str] = {
+    "en": "Checking for updates...",
+    "zh-Hans": "正在检查更新...",
+    "zh-Hant": "正在檢查更新...",
+}
+
+TRAY_INSTALL_UPDATE_LABELS: dict[str, str] = {
+    "en": "Install update v{version}...",
+    "zh-Hans": "安装更新 v{version}...",
+    "zh-Hant": "安裝更新 v{version}...",
+}
+
+TRAY_SKIP_UPDATE_LABELS: dict[str, str] = {
+    "en": "Skip this version",
+    "zh-Hans": "跳过此版本",
+    "zh-Hant": "略過此版本",
+}
+
+TRAY_UPDATE_AVAILABLE_TITLE_LABELS: dict[str, str] = {
+    "en": "py-shimeji — update available",
+    "zh-Hans": "py-shimeji — 有可用更新",
+    "zh-Hant": "py-shimeji — 有可用更新",
+}
+
+TRAY_UPDATE_AVAILABLE_MESSAGE_LABELS: dict[str, str] = {
+    "en": "Version {version} is available. Use the tray menu to install it.",
+    "zh-Hans": "版本 {version} 已发布。请从托盘菜单安装更新。",
+    "zh-Hant": "版本 {version} 已發布。請從系統匣選單安裝更新。",
+}
+
+TRAY_UPDATE_UP_TO_DATE_TITLE_LABELS: dict[str, str] = {
+    "en": "py-shimeji — up to date",
+    "zh-Hans": "py-shimeji — 已是最新版本",
+    "zh-Hant": "py-shimeji — 已是最新版本",
+}
+
+TRAY_UPDATE_UP_TO_DATE_MESSAGE_LABELS: dict[str, str] = {
+    "en": "You are running version {version}.",
+    "zh-Hans": "当前版本为 {version}。",
+    "zh-Hant": "目前版本為 {version}。",
+}
+
+TRAY_UPDATE_CHECK_FAILED_TITLE_LABELS: dict[str, str] = {
+    "en": "py-shimeji — update check failed",
+    "zh-Hans": "py-shimeji — 检查更新失败",
+    "zh-Hant": "py-shimeji — 檢查更新失敗",
+}
+
+TRAY_UPDATE_CHECK_FAILED_MESSAGE_LABELS: dict[str, str] = {
+    "en": "Could not reach GitHub Releases. Try again later.",
+    "zh-Hans": "无法连接 GitHub Releases，请稍后再试。",
+    "zh-Hant": "無法連線至 GitHub Releases，請稍後再試。",
+}
+
+TRAY_UPDATE_INSTALLING_MESSAGE_LABELS: dict[str, str] = {
+    "en": "Downloading and installing the update. py-shimeji will restart.",
+    "zh-Hans": "正在下载并安装更新，py-shimeji 将重新启动。",
+    "zh-Hant": "正在下載並安裝更新，py-shimeji 將重新啟動。",
+}
+
+TRAY_UPDATE_INSTALL_FAILED_MESSAGE_LABELS: dict[str, str] = {
+    "en": "Could not install the update. Download the latest build from GitHub Releases.",
+    "zh-Hans": "无法安装更新。请从 GitHub Releases 手动下载最新版本。",
+    "zh-Hant": "無法安裝更新。請從 GitHub Releases 手動下載最新版本。",
+}
+
+TRAY_TOOLTIP_VERSION_LABELS: dict[str, str] = {
+    "en": "py-shimeji v{version}",
+    "zh-Hans": "py-shimeji v{version}",
+    "zh-Hant": "py-shimeji v{version}",
+}
+
 TRAY_OUTLOOK_MENU_LABELS: dict[str, str] = {
     "en": "Outlook",
     "zh-Hans": "Outlook",
