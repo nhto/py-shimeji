@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import datetime
-import subprocess
 import sys
-import time
 from typing import Any
 
 from outlook_com_constants import (
@@ -32,7 +30,6 @@ except ImportError:  # pragma: no cover - script import edge case
     def get_outlook_mailbox_store_ids() -> list[str]:
         return []
 
-_OUTLOOK_START_TIMEOUT_SEC = 45
 _CALENDAR_SCAN_LIMIT = 500
 _OL_IMPORTANCE_HIGH = 2
 
@@ -77,6 +74,7 @@ def is_outlook_installed() -> bool:
 
 
 def _attach_outlook_application() -> Any:
+    """Attach to a running classic Outlook instance without launching it."""
     import pywintypes
     import win32com.client
 
@@ -85,22 +83,7 @@ def _attach_outlook_application() -> Any:
     except pywintypes.com_error as exc:
         if exc.hresult != MK_E_UNAVAILABLE:
             raise
-
-    outlook_path = _outlook_exe_path()
-    if outlook_path is None:
-        raise RuntimeError("Outlook is not installed")
-
-    subprocess.Popen([outlook_path], close_fds=True)
-    deadline = time.monotonic() + _OUTLOOK_START_TIMEOUT_SEC
-    while time.monotonic() < deadline:
-        time.sleep(1)
-        try:
-            return win32com.client.GetActiveObject("Outlook.Application")
-        except pywintypes.com_error as exc:
-            if exc.hresult != MK_E_UNAVAILABLE:
-                raise
-
-    return win32com.client.Dispatch("Outlook.Application")
+        raise RuntimeError("Outlook is not running") from exc
 
 
 class OutlookComClient:
