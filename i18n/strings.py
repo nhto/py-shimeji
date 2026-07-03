@@ -864,6 +864,12 @@ CHAT_SEND_LABELS: dict[str, str] = {
     "zh-Hant": "傳送",
 }
 
+CHAT_CLEAR_HISTORY_LABELS: dict[str, str] = {
+    "en": "Clear history",
+    "zh-Hans": "清空记录",
+    "zh-Hant": "清空紀錄",
+}
+
 CHAT_ATTACH_IMAGE_LABELS: dict[str, str] = {
     "en": "Attach image",
     "zh-Hans": "附加图片",

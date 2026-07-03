@@ -375,6 +375,22 @@ LIGHT_CHAT_STYLESHEET = """
         color: #0f172a;
         border-color: #94a3b8;
     }
+    QPushButton#clearHistoryButton {
+        background-color: transparent;
+        color: #64748b;
+        border: none;
+        border-radius: 8px;
+        padding: 2px 8px;
+        font-size: 11px;
+    }
+    QPushButton#clearHistoryButton:hover {
+        color: #0f172a;
+        background-color: #f1f5f9;
+    }
+    QPushButton#clearHistoryButton:disabled {
+        color: #cbd5e1;
+        background-color: transparent;
+    }
     QComboBox#modelPicker,
     QComboBox#languagePicker {
         background-color: #ffffff;
