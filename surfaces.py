@@ -4,13 +4,27 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-from PyQt6.QtCore import QRect
+from PyQt6.QtCore import QObject, QRect, QTimer
 
-from config import MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, PET_HEIGHT, PET_WIDTH, TOP_PERCH_MARGIN_PX
+from settings.core import MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, PET_HEIGHT, PET_WIDTH, SURFACE_REFRESH_MS, TOP_PERCH_MARGIN_PX
+
+if TYPE_CHECKING:
+    from pet_window import PetWindow
 
 Side = Literal["left", "right"]
+
+
+@dataclass(frozen=True)
+class WindowRect:
+    """Screen geometry for one visible top-level window."""
+
+    hwnd: int
+    left: int
+    top: int
+    right: int
+    bottom: int
 
 
 @dataclass(frozen=True)
@@ -67,8 +81,6 @@ class SurfaceTracker:
         self._pet_width = PET_WIDTH
         self._pet_height = PET_HEIGHT
         self._enabled = sys.platform == "win32"
-        if self._enabled:
-            self._init_win32()
 
     def set_pet_dimensions(self, pet_width: int, pet_height: int) -> None:
         """Update the pet footprint used for ledge geometry and collision."""
@@ -78,13 +90,19 @@ class SurfaceTracker:
     def refresh(
         self, play_area: QRect, exclude_hwnds: int | set[int] | None = None
     ) -> None:
-        """Rebuild ledge lists for the current play area and window layout."""
+        """Enumerate windows and rebuild ledge lists (standalone / fallback use)."""
         if exclude_hwnds is None:
             exclude_set: set[int] = set()
         elif isinstance(exclude_hwnds, int):
             exclude_set = {exclude_hwnds} if exclude_hwnds else set()
         else:
             exclude_set = exclude_hwnds
+        enumerator = WindowEnumerator()
+        windows = enumerator.enumerate(exclude_set)
+        self.rebuild_ledges(play_area, windows)
+
+    def rebuild_ledges(self, play_area: QRect, windows: list[WindowRect]) -> None:
+        """Rebuild ledge lists from cached window geometry (no EnumWindows)."""
         floor = HorizontalLedge(
             left=play_area.left(),
             right=play_area.right(),
@@ -98,41 +116,41 @@ class SurfaceTracker:
         if not self._enabled:
             return
 
-        for hwnd, rect in self._enumerate_windows(exclude_set):
-            width = rect.right - rect.left
-            height = rect.bottom - rect.top
+        for window in windows:
+            width = window.right - window.left
+            height = window.bottom - window.top
             if width < MIN_WINDOW_WIDTH or height < MIN_WINDOW_HEIGHT:
                 continue
-            if rect.bottom <= play_area.top() or rect.top >= play_area.bottom():
+            if window.bottom <= play_area.top() or window.top >= play_area.bottom():
                 continue
 
             # Win32 RECT.right is exclusive; clamp to the play area so pets cannot
             # walk off the visible screen edge on partially off-screen windows.
-            ledge_left = max(rect.left, play_area.left())
-            ledge_right = min(rect.right - 1, play_area.right())
+            ledge_left = max(window.left, play_area.left())
+            ledge_right = min(window.right - 1, play_area.right())
             if ledge_right - ledge_left < self._pet_width - 1:
                 continue
 
-            ledge_top = max(rect.top, play_area.top())
-            ledge_bottom = min(rect.bottom, play_area.bottom())
+            ledge_top = max(window.top, play_area.top())
+            ledge_bottom = min(window.bottom, play_area.bottom())
             if ledge_bottom - ledge_top >= MIN_WINDOW_HEIGHT:
                 self._vertical.append(
                     VerticalLedge(
-                        edge_x=rect.left,
+                        edge_x=window.left,
                         top=ledge_top,
                         bottom=ledge_bottom,
                         side="left",
-                        hwnd=hwnd,
+                        hwnd=window.hwnd,
                         pet_width=self._pet_width,
                     )
                 )
                 self._vertical.append(
                     VerticalLedge(
-                        edge_x=rect.right,
+                        edge_x=window.right,
                         top=ledge_top,
                         bottom=ledge_bottom,
                         side="right",
-                        hwnd=hwnd,
+                        hwnd=window.hwnd,
                         pet_width=self._pet_width,
                     )
                 )
@@ -140,10 +158,10 @@ class SurfaceTracker:
             # Skip title bars that would clamp to the screen top; they create
             # bogus perches (e.g. maximized windows) where the pet gets stuck.
             min_window_top = play_area.top() + self._pet_height - 1
-            if rect.top < min_window_top:
+            if window.top < min_window_top:
                 continue
 
-            stand_y = rect.top - self._pet_height + 1
+            stand_y = window.top - self._pet_height + 1
             if stand_y < play_area.top() + TOP_PERCH_MARGIN_PX:
                 continue
 
@@ -152,9 +170,9 @@ class SurfaceTracker:
                     left=ledge_left,
                     right=ledge_right,
                     stand_y=stand_y,
-                    ledge_id=f"hwnd:{hwnd}",
+                    ledge_id=f"hwnd:{window.hwnd}",
                     pet_width=self._pet_width,
-                    hwnd=hwnd,
+                    hwnd=window.hwnd,
                 )
             )
 
@@ -246,46 +264,34 @@ class SurfaceTracker:
                 return ledge
         return None
 
-    # ------------------------------------------------------------------
-    # Win32 enumeration
-    # ------------------------------------------------------------------
 
-    def _init_win32(self) -> None:
-        import ctypes
-        from ctypes import wintypes
+class WindowEnumerator:
+    """Shared Win32 window scan used by all pets."""
 
-        self._ctypes = ctypes
-        self._user32 = ctypes.windll.user32
-        self._wintypes = wintypes
+    _SKIP_WINDOW_CLASSES = frozenset(
+        {
+            "Progman",
+            "WorkerW",
+            "Shell_TrayWnd",
+            "Shell_SecondaryTrayWnd",
+            "DV2ControlHost",
+            "Windows.UI.Core.CoreWindow",
+        }
+    )
 
-        class RECT(ctypes.Structure):
-            _fields_ = [
-                ("left", ctypes.c_long),
-                ("top", ctypes.c_long),
-                ("right", ctypes.c_long),
-                ("bottom", ctypes.c_long),
-            ]
+    def __init__(self) -> None:
+        self._enabled = sys.platform == "win32"
+        self._enum_proc = None
+        if self._enabled:
+            self._init_win32()
 
-        self._RECT = RECT
-        self._WNDENUMPROC = ctypes.WINFUNCTYPE(
-            wintypes.BOOL, wintypes.HWND, wintypes.LPARAM
-        )
-        # Desktop/shell HWND classes are not real climbable surfaces.
-        self._SKIP_WINDOW_CLASSES = frozenset(
-            {
-                "Progman",
-                "WorkerW",
-                "Shell_TrayWnd",
-                "Shell_SecondaryTrayWnd",
-                "DV2ControlHost",
-                "Windows.UI.Core.CoreWindow",
-            }
-        )
+    def enumerate(self, exclude_hwnds: set[int]) -> list[WindowRect]:
+        if not self._enabled:
+            return []
 
-    def _enumerate_windows(self, exclude_hwnds: set[int]) -> list[tuple[int, object]]:
         import ctypes
 
-        results: list[tuple[int, object]] = []
+        results: list[WindowRect] = []
 
         def callback(hwnd: int, _lparam: int) -> bool:
             if hwnd in exclude_hwnds:
@@ -309,9 +315,81 @@ class SurfaceTracker:
             if width <= 0 or height <= 0:
                 return True
 
-            results.append((int(hwnd), rect))
+            results.append(
+                WindowRect(
+                    hwnd=int(hwnd),
+                    left=rect.left,
+                    top=rect.top,
+                    right=rect.right,
+                    bottom=rect.bottom,
+                )
+            )
             return True
 
-        proc = self._WNDENUMPROC(callback)
-        self._user32.EnumWindows(proc, 0)
+        self._enum_proc = self._WNDENUMPROC(callback)
+        self._user32.EnumWindows(self._enum_proc, 0)
         return results
+
+    def _init_win32(self) -> None:
+        import ctypes
+        from ctypes import wintypes
+
+        self._user32 = ctypes.windll.user32
+
+        class RECT(ctypes.Structure):
+            _fields_ = [
+                ("left", ctypes.c_long),
+                ("top", ctypes.c_long),
+                ("right", ctypes.c_long),
+                ("bottom", ctypes.c_long),
+            ]
+
+        self._RECT = RECT
+        self._WNDENUMPROC = ctypes.WINFUNCTYPE(
+            wintypes.BOOL, wintypes.HWND, wintypes.LPARAM
+        )
+
+
+class SharedSurfaceCoordinator(QObject):
+    """Enumerate desktop windows once per interval and rebuild all pet ledges."""
+
+    def __init__(
+        self,
+        exclude_hwnds: set[int],
+        parent: QObject | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._exclude_hwnds = exclude_hwnds
+        self._enumerator = WindowEnumerator()
+        self._cached_windows: list[WindowRect] = []
+        self._pets: list[PetWindow] = []
+
+        self._timer = QTimer(self)
+        self._timer.setInterval(SURFACE_REFRESH_MS)
+        self._timer.timeout.connect(self.refresh)
+        self._timer.start()
+
+    @property
+    def cached_windows(self) -> list[WindowRect]:
+        return self._cached_windows
+
+    def set_pets(self, pets: list[PetWindow]) -> None:
+        self._pets = list(pets)
+
+    def register_pet(self, pet: PetWindow) -> None:
+        if pet not in self._pets:
+            self._pets.append(pet)
+
+    def unregister_pet(self, pet: PetWindow) -> None:
+        if pet in self._pets:
+            self._pets.remove(pet)
+
+    def refresh(self) -> None:
+        """Scan windows once, then rebuild ledges for every registered pet."""
+        self._cached_windows = self._enumerator.enumerate(self._exclude_hwnds)
+        for pet in self._pets:
+            pet.rebuild_surfaces_from_cache(self._cached_windows)
+
+    def rebuild_pet(self, pet: PetWindow) -> None:
+        """Rebuild one pet's ledges from the cached window list."""
+        pet.rebuild_surfaces_from_cache(self._cached_windows)

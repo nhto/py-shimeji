@@ -17,6 +17,7 @@ from config import (
 )
 from display import DisplayChangeWatcher
 from pet_window import PetWindow
+from surfaces import SharedSurfaceCoordinator
 from tray import SystemTray
 
 
@@ -35,15 +36,19 @@ def main() -> int:
 
     exclude_hwnds: set[int] = set()
     pet_count = max(1, get_saved_pet_count())
+    surface_coordinator = SharedSurfaceCoordinator(exclude_hwnds)
     pets = [
         PetWindow(
             pet_index=index,
             pet_count=pet_count,
             exclude_hwnds=exclude_hwnds,
             sprites_dir=get_pet_sprites_dir(index),
+            surface_coordinator=surface_coordinator,
         )
         for index in range(pet_count)
     ]
+    surface_coordinator.set_pets(pets)
+    surface_coordinator.refresh()
     for index, pet in enumerate(pets):
         pet.set_peer_pets([other for other_index, other in enumerate(pets) if other_index != index])
         pet.apply_behavior_settings()
@@ -59,7 +64,11 @@ def main() -> int:
         if visible:
             pet.show()
 
-    display_watcher = DisplayChangeWatcher(pets, parent=pets[0] if pets else None)
+    display_watcher = DisplayChangeWatcher(
+        pets,
+        surface_coordinator=surface_coordinator,
+        parent=pets[0] if pets else None,
+    )
 
     outlook_status = None
     outlook_monitor = None
@@ -81,6 +90,7 @@ def main() -> int:
             pets,
             exclude_hwnds=exclude_hwnds,
             display_watcher=display_watcher,
+            surface_coordinator=surface_coordinator,
             outlook_status=outlook_status,
             outlook_monitor=outlook_monitor,
         )

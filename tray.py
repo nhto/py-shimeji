@@ -74,6 +74,7 @@ from config import (
 from hotkeys import GlobalHotkeyManager
 from outlook_settings_dialog import open_outlook_settings_dialog
 from pet_window import PetWindow
+from surfaces import SharedSurfaceCoordinator
 from sprite_picker_dialog import open_sprite_picker_dialog
 from update import UpdateInfo
 from update_ui import UpdateController
@@ -120,6 +121,7 @@ class SystemTray:
         *,
         exclude_hwnds: set[int] | None = None,
         display_watcher: DisplayChangeWatcher | None = None,
+        surface_coordinator: SharedSurfaceCoordinator | None = None,
         outlook_status: OutlookStatusManager | None = None,
         outlook_monitor: OutlookMonitor | None = None,
     ) -> None:
@@ -127,6 +129,7 @@ class SystemTray:
         self._pets = pets
         self._exclude_hwnds = exclude_hwnds if exclude_hwnds is not None else set()
         self._display_watcher = display_watcher
+        self._surface_coordinator = surface_coordinator
         self._outlook_status = outlook_status
         self._outlook_monitor = outlook_monitor
         self._tray = QSystemTrayIcon(_build_tray_icon(), parent=pets[0] if pets else None)
@@ -610,6 +613,7 @@ class SystemTray:
                 pet_count=target,
                 exclude_hwnds=self._exclude_hwnds,
                 sprites_dir=get_pet_sprites_dir(index),
+                surface_coordinator=self._surface_coordinator,
             )
             pet.set_click_through(click_through)
             pet.set_motion_paused(motion_paused)
@@ -624,10 +628,15 @@ class SystemTray:
 
         while len(self._pets) > target:
             pet = self._pets.pop()
+            if self._surface_coordinator is not None:
+                self._surface_coordinator.unregister_pet(pet)
             pet.hide()
             pet.deleteLater()
 
         self._sync_peer_pets()
+        if self._surface_coordinator is not None:
+            self._surface_coordinator.set_pets(self._pets)
+            self._surface_coordinator.refresh()
         if self._display_watcher is not None:
             self._display_watcher.set_pets(self._pets)
         self._replace_menu()
