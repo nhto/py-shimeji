@@ -58,6 +58,9 @@ from config import (
     AMBIENT_SPEECH_EVENT_CHANCE,
     AMBIENT_SPEECH_INTERVAL_MAX_MS,
     AMBIENT_SPEECH_INTERVAL_MIN_MS,
+    DRAG_THRESHOLD_PX,
+    POKE_ANIMATION_MS,
+    POKE_SIT_DURATION_MS,
 )
 from settings.core import format_speech_bubble_text
 from speech_bubble import SpeechBubbleWindow
@@ -262,6 +265,10 @@ class PetWindow(QWidget):
         self._frame_index: int = 0
         self._drag_offset = QPoint(0, 0)
         self._is_dragging: bool = False
+        self._drag_pending: bool = False
+        self._press_global_pos: QPoint | None = None
+        self._poke_anim_active: bool = False
+        self._poke_anim_token: int = 0
         self._play_area: QRect = QRect()
         self._surfaces = SurfaceTracker()
         self._surfaces.set_pet_dimensions(self._pet_width, self._pet_height)
@@ -928,8 +935,9 @@ class PetWindow(QWidget):
         ):
             return
         if self._fsm.state == PetState.WALKING:
-            self._horizontal_walk_tick()
-            self._handle_peer_interactions()
+            if not self._poke_anim_active:
+                self._horizontal_walk_tick()
+                self._handle_peer_interactions()
         elif self._fsm.state == PetState.CHASING_CURSOR:
             self._cursor_chase_tick()
             self._handle_peer_interactions()
@@ -1350,6 +1358,92 @@ class PetWindow(QWidget):
         if self._context_menu_handler is not None:
             self._context_menu_handler(global_pos, self)
 
+    def poke(self) -> None:
+        """React to a double-click poke: phrase, brief sit, or walk-in-place."""
+        if self._click_through or self._is_dragging:
+            return
+        if self._menu_hold or self._chat_hold:
+            return
+        if self._fsm.state in (PetState.FALLING, PetState.CLIMBING, PetState.DRAGGED):
+            return
+
+        self._drag_pending = False
+        self._press_global_pos = None
+        self._cancel_poke_animation()
+
+        roll = random.random()
+        if roll < 1 / 3:
+            self._poke_phrase()
+        elif roll < 2 / 3:
+            self._poke_sit()
+        else:
+            self._poke_brief_animation()
+
+    def _poke_phrase(self) -> None:
+        if self._speech_bubble is not None and self._speech_bubble.isVisible():
+            return
+        phrase = get_ambient_phrase("poke")
+        if phrase is not None:
+            self.show_speech_bubble(phrase)
+
+    def _poke_sit(self) -> None:
+        if self._menu_hold or self._chat_hold:
+            return
+        if self._fsm.state == PetState.SIT:
+            self._fsm.extend_sit()
+        elif not self._motion_paused:
+            self._fsm.begin_sit_for(POKE_SIT_DURATION_MS)
+        self._frame_index = 0
+        self._anim_timer.start()
+        self.update()
+
+    def _poke_brief_animation(self) -> None:
+        if self._motion_paused or self._menu_hold or self._chat_hold:
+            self._poke_sit()
+            return
+        self._poke_anim_active = True
+        self._frame_index = 0
+        self._fsm.force_state(PetState.WALKING)
+        self._anim_timer.start()
+        self._poke_anim_token += 1
+        token = self._poke_anim_token
+        QTimer.singleShot(POKE_ANIMATION_MS, lambda: self._end_poke_animation(token))
+        self.update()
+
+    def _cancel_poke_animation(self) -> None:
+        self._poke_anim_token += 1
+        self._poke_anim_active = False
+
+    def _end_poke_animation(self, token: int | None = None) -> None:
+        if token is not None and token != self._poke_anim_token:
+            return
+        if not self._poke_anim_active:
+            return
+        self._poke_anim_active = False
+        if self._fsm.state != PetState.WALKING:
+            return
+        if self._motion_paused or self._menu_hold or self._chat_hold:
+            return
+        if self._is_on_support():
+            self._fsm.force_state(PetState.IDLE)
+        else:
+            self._active_ledge = None
+            self._fsm.force_state(PetState.FALLING)
+        self.update()
+
+    def _start_drag_at(self, global_pos: QPoint) -> None:
+        self._is_dragging = True
+        self._drag_pending = False
+        self._cursor_sit_active = False
+        self._cursor_still_ms = 0
+        self._cursor_chase_ms_left = 0
+        self._cancel_poke_animation()
+        self._drag_offset = global_pos - self.frameGeometry().topLeft()
+        self._fsm.pause()
+        self._fsm.force_state(PetState.DRAGGED)
+        self._fall_timer.stop()
+        self._climb_ledge = None
+
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.RightButton:
             if not self._click_through:
@@ -1359,18 +1453,29 @@ class PetWindow(QWidget):
             return
         if event.button() != Qt.MouseButton.LeftButton:
             return
-        self._is_dragging = True
-        self._cursor_sit_active = False
-        self._cursor_still_ms = 0
-        self._cursor_chase_ms_left = 0
-        self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-        self._fsm.pause()
-        self._fsm.force_state(PetState.DRAGGED)
-        self._fall_timer.stop()
-        self._climb_ledge = None
+        self._drag_pending = True
+        self._press_global_pos = event.globalPosition().toPoint()
+        self._drag_offset = self._press_global_pos - self.frameGeometry().topLeft()
+        event.accept()
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if self._click_through:
+            return
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+        self.poke()
         event.accept()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if self._drag_pending and not self._is_dragging:
+            if self._press_global_pos is not None:
+                pos = event.globalPosition().toPoint()
+                if (
+                    pos - self._press_global_pos
+                ).manhattanLength() >= DRAG_THRESHOLD_PX:
+                    self._start_drag_at(self._press_global_pos)
+            if not self._is_dragging:
+                return
         if not self._is_dragging:
             return
         new_pos = event.globalPosition().toPoint() - self._drag_offset
@@ -1380,9 +1485,18 @@ class PetWindow(QWidget):
         event.accept()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        if event.button() != Qt.MouseButton.LeftButton or not self._is_dragging:
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+        if self._drag_pending and not self._is_dragging:
+            self._drag_pending = False
+            self._press_global_pos = None
+            event.accept()
+            return
+        if not self._is_dragging:
             return
         self._is_dragging = False
+        self._drag_pending = False
+        self._press_global_pos = None
         if self._motion_paused:
             self._finish_drag_while_paused()
             event.accept()

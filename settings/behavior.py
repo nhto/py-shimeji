@@ -68,6 +68,12 @@ AMBIENT_LAND_PHRASES: dict[str, list[str]] = {
     "zh-Hant": ["安全落地！", "好險。", "呼~", "著陸~"],
 }
 
+AMBIENT_POKE_PHRASES: dict[str, list[str]] = {
+    "en": ["Hey!", "Poke!", "*boop*", "That tickles~", "Again?", "Hi there!", "Mmh?"],
+    "zh-Hans": ["嘿！", "戳戳！", "*啵*", "好痒~", "又来？", "你好呀！", "嗯？"],
+    "zh-Hant": ["嘿！", "戳戳！", "*啵*", "好癢~", "又來？", "你好呀！", "嗯？"],
+}
+
 
 def _behavior_settings() -> dict:
     behavior = load_app_settings().get("behavior", {})
@@ -162,6 +168,8 @@ def get_ambient_phrase(event: str | None = None) -> str | None:
         phrases = AMBIENT_BUMP_PHRASES.get(language, AMBIENT_BUMP_PHRASES["en"])
     elif event == "land":
         phrases = AMBIENT_LAND_PHRASES.get(language, AMBIENT_LAND_PHRASES["en"])
+    elif event == "poke":
+        phrases = AMBIENT_POKE_PHRASES.get(language, AMBIENT_POKE_PHRASES["en"])
     else:
         phrases = AMBIENT_SPEECH_PHRASES.get(language, AMBIENT_SPEECH_PHRASES["en"])
     if not phrases:

@@ -105,6 +105,11 @@ class PetStateMachine(QObject):
         self._next_idle_walk_ms = self._random_sit_duration()
         self._transition(PetState.SIT)
 
+    def begin_sit_for(self, duration_ms: int) -> None:
+        """Sit for a fixed duration (e.g. double-click poke)."""
+        self._next_idle_walk_ms = max(BEHAVIOR_INTERVAL_MS, duration_ms)
+        self._transition(PetState.SIT)
+
     def begin_cursor_chase(self) -> None:
         """Walk toward the mouse cursor on the current ledge."""
         self._transition(PetState.CHASING_CURSOR)

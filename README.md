@@ -357,6 +357,7 @@ Converted packs are written to `assets/sprites/imported/<pack-name>/` and appear
 ## Controls
 
 - **Left-click + drag** — pick up a pet (DRAGGED state); disable **Click-through** in the tray first if it is enabled
+- **Double-click** — poke the pet (random phrase, brief sit, or walk-in-place animation)
 - **Right-click** — open the tray menu at the pet
 - **Release on floor** — return to walking / idle
 - **Release in mid-air** — FALLING until the nearest ledge or floor
