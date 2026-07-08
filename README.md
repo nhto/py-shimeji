@@ -54,7 +54,7 @@ Keys saved from the tray menu are written to `.env` and take effect immediately 
 
 Many universities and companies **do not allow** personal/third-party apps to use Graph on work mailboxes. **New Outlook has no other API** — py-shimeji cannot read it without Graph.
 
-**Your workable option: switch to Classic Outlook + COM** (this already worked on your PC in Phase 0):
+**Your workable option: switch to Classic Outlook + COM** (use this if COM connectivity worked during setup):
 
 1. **Turn off New Outlook** — in the New Outlook window, use the toggle at the top-right (*Try new Outlook* → switch off), **or** open **Outlook (classic)** from the Windows Start menu (not the “New” icon).
 2. Sign in to your work account in classic Outlook and wait for sync.
