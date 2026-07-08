@@ -54,7 +54,7 @@ Keys saved from the tray menu are written to `.env` and take effect immediately 
 
 Many universities and companies **do not allow** personal/third-party apps to use Graph on work mailboxes. **New Outlook has no other API** — py-shimeji cannot read it without Graph.
 
-**Your workable option: switch to Classic Outlook + COM** (this already worked on your PC in Phase 0):
+**Your workable option: switch to Classic Outlook + COM** (use this if COM connectivity worked during setup):
 
 1. **Turn off New Outlook** — in the New Outlook window, use the toggle at the top-right (*Try new Outlook* → switch off), **or** open **Outlook (classic)** from the Windows Start menu (not the “New” icon).
 2. Sign in to your work account in classic Outlook and wait for sync.
@@ -171,9 +171,45 @@ Copy-Item -Force .env.example dist\py-shimeji\.env.example
 ### Share the build
 
 1. Run the build (above).
-2. Zip the entire `dist\py-shimeji\` folder (~100 MB).
+2. Zip the entire `dist\py-shimeji\` folder (~100 MB), or use `.\scripts\build-release.ps1` to create a versioned zip automatically.
 3. Recipients unzip anywhere and run `py-shimeji.exe` — no Python install needed.
 4. Optional: rename `.env.example` to `.env` and add an OpenRouter key, or set the key from the tray menu after first launch.
+
+### Releases, auto-update, and installer
+
+**Version** is defined in `version.py`. The tray tooltip shows `py-shimeji v{version}`.
+
+**GitHub Releases** (tag `v*` e.g. `v0.1.0`) are built by [`.github/workflows/release.yml`](.github/workflows/release.yml) and publish:
+
+| Asset | Purpose |
+|-------|---------|
+| `py-shimeji-{version}.zip` | Portable folder — used by in-app auto-update |
+| `py-shimeji-setup-{version}.exe` | Inno Setup installer for `%LocalAppData%\Programs\py-shimeji` |
+
+**In-app updates** (packaged `.exe` only):
+
+- On startup, the app checks [GitHub Releases](https://github.com/nhto/py-shimeji/releases) after a short delay (can be disabled in `.app_settings.json` with `"update_check_enabled": false`).
+- Tray → **Check for updates...** — manual check.
+- When an update is available: **Install update v…** downloads the portable zip, replaces the app folder (keeping `.env` and JSON settings), and restarts via `py-shimeji-updater.exe`.
+
+**Build a release locally:**
+
+```powershell
+.\scripts\build-release.ps1              # zip only
+.\scripts\build-release.ps1 -Installer   # zip + Inno Setup installer
+.\scripts\build-release.ps1 -Installer -Sign   # also Authenticode-sign exes
+```
+
+Signing uses `scripts\sign.ps1` when `WINDOWS_SIGN_CERT_PATH` (PFX) and `WINDOWS_SIGN_CERT_PASSWORD` are set. Signed builds reduce Windows SmartScreen warnings for shared installers.
+
+**CI secrets for signed releases** (optional):
+
+| Secret | Description |
+|--------|-------------|
+| `WINDOWS_SIGN_CERT_BASE64` | Base64-encoded `.pfx` code-signing certificate |
+| `WINDOWS_SIGN_CERT_PASSWORD` | PFX password |
+
+Without these secrets, CI still builds and uploads unsigned artifacts.
 
 ### After building
 
@@ -233,9 +269,17 @@ py-shimeji/
 ├── outlook_status.py        # Tray connection state + unread polling
 ├── outlook_settings_dialog.py  # Outlook connect status and toggles
 ├── py-shimeji.spec  # PyInstaller build spec
+├── py-shimeji-updater.spec  # Updater helper for in-app updates
+├── version.py       # App version and GitHub repo id
+├── update.py        # GitHub Releases check and auto-update
+├── update_ui.py     # Tray-integrated update controller
+├── updater.py       # Small helper exe that applies updates on disk
 ├── scripts/
 │   ├── build.sh               # One-command build (Git Bash / Unix)
 │   ├── build.ps1              # One-command build (PowerShell)
+│   ├── build-release.ps1      # Versioned zip + optional installer
+│   ├── sign.ps1               # Authenticode signing helper
+│   ├── installer.iss          # Inno Setup installer script
 │   ├── convert_shimeji_pack.py  # Shimeji actions.xml → py-shimeji PNG converter
 │   ├── test_outlook_com.py    # Phase 0: Outlook COM feasibility check (Windows)
 │   └── demo_outlook_com_client.py  # Phase 1: inbox/calendar COM client demo
@@ -313,6 +357,7 @@ Converted packs are written to `assets/sprites/imported/<pack-name>/` and appear
 ## Controls
 
 - **Left-click + drag** — pick up a pet (DRAGGED state); disable **Click-through** in the tray first if it is enabled
+- **Double-click** — poke the pet (random phrase, brief sit, or walk-in-place animation)
 - **Right-click** — open the tray menu at the pet
 - **Release on floor** — return to walking / idle
 - **Release in mid-air** — FALLING until the nearest ledge or floor
@@ -378,3 +423,22 @@ Enable **Click-through (pass mouse clicks)** from the system tray when you want 
 Enable **Pause pets (reduce motion)** from the system tray when you want pets visible but still — useful for meetings, screen sharing, or accessibility. Pets snap to the nearest ledge or floor, stop walking and animating, and stay in a sit pose. The setting is remembered across restarts.
 
 You can still drag pets while paused if click-through is off. Turn pause off to resume normal behavior.
+
+## Privacy and security
+
+py-shimeji runs locally on your machine. Optional features send or store data as described below.
+
+| Data | Stored locally | Sent over the network |
+|------|----------------|------------------------|
+| OpenRouter API key | Plain text in `.env` next to the executable (or project root in dev) | Sent to [OpenRouter](https://openrouter.ai/) as a Bearer token when you chat |
+| Chat messages and images | In memory for the current session only (not persisted to disk) | Sent to OpenRouter when you message Bubu |
+| Chat model / language | `.chat_settings.json` | Not sent except as part of chat API requests |
+| MSAL sign-in tokens | `graph_token_cache` in `.app_settings.json` (plain text) | Used to call Microsoft Graph when Outlook (Graph mode) is connected |
+| Outlook mail notifications | Seen-mail IDs and snooze state in `.app_settings.json` | Mail is read via Outlook COM or Graph on your PC; not uploaded elsewhere |
+| On-screen / tray alerts | — | Sender, subject, and up to ~60 characters of body preview shown in speech bubbles or the system tray |
+
+**What is not logged:** Outlook debug logs record sender and subject only — never full message bodies.
+
+**Auto-updates:** Frozen builds may download release zips from [GitHub Releases](https://github.com/nhto/py-shimeji/releases) over HTTPS. User files (`.env`, `.app_settings.json`, `.chat_settings.json`) are preserved during updates.
+
+**Reporting issues:** If you find a security vulnerability, please open a [GitHub issue](https://github.com/nhto/py-shimeji/issues) or contact the maintainer privately rather than posting details publicly.

@@ -9,6 +9,7 @@ from PyQt6.QtGui import QGuiApplication, QScreen
 
 if TYPE_CHECKING:
     from pet_window import PetWindow
+    from surfaces import SharedSurfaceCoordinator
 
 
 class DisplayChangeWatcher(QObject):
@@ -17,10 +18,13 @@ class DisplayChangeWatcher(QObject):
     def __init__(
         self,
         pets: list[PetWindow],
+        *,
+        surface_coordinator: SharedSurfaceCoordinator | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
         self._pets = pets
+        self._surface_coordinator = surface_coordinator
         app = QGuiApplication.instance()
         if app is None:
             return
@@ -48,6 +52,8 @@ class DisplayChangeWatcher(QObject):
         self._on_display_changed()
 
     def _on_display_changed(self, *_args: object) -> None:
+        if self._surface_coordinator is not None:
+            self._surface_coordinator.refresh()
         for pet in self._pets:
             pet.handle_display_changed()
 

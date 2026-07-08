@@ -71,3 +71,13 @@ def test_set_direction_rejects_invalid_values(qapp) -> None:
     except ValueError:
         raised = True
     assert raised
+
+
+def test_begin_sit_for_uses_fixed_duration(qapp) -> None:
+    machine = PetStateMachine(on_state_changed=lambda *_: None)
+    machine._behavior_timer.stop()
+    machine.force_state(PetState.WALKING)
+
+    machine.begin_sit_for(1_500)
+    assert machine.state == PetState.SIT
+    assert machine._next_idle_walk_ms == 1_500

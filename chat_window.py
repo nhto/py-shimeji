@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
 
 from config import (
     CHAT_ATTACH_IMAGE_LABELS,
+    CHAT_CLEAR_HISTORY_LABELS,
     CHAT_GREETINGS,
     CHAT_IMAGE_ONLY_LABELS,
     CHAT_IMAGE_TOO_LARGE_LABELS,
@@ -147,7 +148,7 @@ class ChatWorker(QThread):
             headers={
                 "Authorization": f"Bearer {get_openrouter_api_key()}",
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://github.com/py-shimeji",
+                "HTTP-Referer": "https://github.com/nhto/py-shimeji",
                 "X-Title": "py-shimeji",
             },
         )
@@ -405,6 +406,18 @@ class ChatWindow(QWidget):
         body_layout.setContentsMargins(14, 12, 14, 14)
         body_layout.setSpacing(12)
 
+        transcript_toolbar = QHBoxLayout()
+        transcript_toolbar.setContentsMargins(0, 0, 0, 0)
+        transcript_toolbar.addStretch()
+        self._clear_history_button = QPushButton(
+            self._localized(CHAT_CLEAR_HISTORY_LABELS)
+        )
+        self._clear_history_button.setObjectName("clearHistoryButton")
+        self._clear_history_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._clear_history_button.clicked.connect(self._clear_chat_history)
+        transcript_toolbar.addWidget(self._clear_history_button)
+        body_layout.addLayout(transcript_toolbar)
+
         self._transcript = QTextEdit()
         self._transcript.setObjectName("transcript")
         self._transcript.setReadOnly(True)
@@ -457,6 +470,7 @@ class ChatWindow(QWidget):
 
         self._update_input_labels()
         self._update_image_upload_visibility()
+        self._update_clear_history_button_state()
 
         body_layout.addWidget(composer)
         card_layout.addWidget(body, stretch=1)
@@ -702,10 +716,39 @@ class ChatWindow(QWidget):
         self._attach_button.setEnabled(enabled)
         self._model_picker.setEnabled(enabled)
         self._language_picker.setEnabled(True)
+        self._update_clear_history_button_state()
 
     def _update_input_labels(self) -> None:
         self._update_api_key_state()
         self._update_attach_button_state()
+        self._clear_history_button.setText(self._localized(CHAT_CLEAR_HISTORY_LABELS))
+        self._update_clear_history_button_state()
+
+    def _has_clearable_history(self) -> bool:
+        return any(message.role == "user" for message in self._messages)
+
+    def _update_clear_history_button_state(self) -> None:
+        self._clear_history_button.setEnabled(self._has_clearable_history() and not self._busy)
+
+    def _clear_chat_history(self) -> None:
+        if self._busy or not self._has_clearable_history():
+            return
+
+        self._messages.clear()
+        self._history = [
+            ChatMessage("system", build_chat_system_prompt(self._language)),
+        ]
+        self._streaming_reply = ""
+        self._input.clear()
+        self._clear_pending_image()
+
+        if has_openrouter_api_key():
+            self._append_bubu_message(CHAT_GREETINGS[self._language])
+        else:
+            self._append_bubu_message(CHAT_NO_API_KEY_GREETINGS[self._language])
+
+        self._update_clear_history_button_state()
+        self._input.setFocus()
 
     def _update_image_upload_visibility(self) -> None:
         supports_images = chat_model_supports_images(self._model)
@@ -785,6 +828,8 @@ class ChatWindow(QWidget):
             )
             self._render_transcript()
 
+        self._update_clear_history_button_state()
+
     def _send_message(self) -> None:
         if not has_openrouter_api_key():
             self._append_bubu_message(self._localized(CHAT_NO_API_KEY_SEND_LABELS))
@@ -804,6 +849,7 @@ class ChatWindow(QWidget):
         self._sync_system_prompt()
         self._history.append(ChatMessage("user", text, image_data_urls))
         self._trim_history()
+        self._update_clear_history_button_state()
         self._set_busy(True)
         self._streaming_reply = ""
         self._render_transcript()

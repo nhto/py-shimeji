@@ -42,7 +42,6 @@ from config import (
     PEER_SIT_ON_BUMP_CHANCE,
     PET_FALLBACK_PALETTES,
     SPRITE_FILES,
-    SURFACE_REFRESH_MS,
     TOP_PERCH_MARGIN_PX,
     get_ambient_phrase,
     get_ambient_speech_enabled,
@@ -59,11 +58,20 @@ from config import (
     AMBIENT_SPEECH_EVENT_CHANCE,
     AMBIENT_SPEECH_INTERVAL_MAX_MS,
     AMBIENT_SPEECH_INTERVAL_MIN_MS,
+    DRAG_THRESHOLD_PX,
+    POKE_ANIMATION_MS,
+    POKE_SIT_DURATION_MS,
 )
 from settings.core import format_speech_bubble_text
 from speech_bubble import SpeechBubbleWindow
 from states import PetState, PetStateMachine
-from surfaces import HorizontalLedge, SurfaceTracker, VerticalLedge
+from surfaces import (
+    HorizontalLedge,
+    SharedSurfaceCoordinator,
+    SurfaceTracker,
+    VerticalLedge,
+    WindowRect,
+)
 
 
 def _is_background_pixel(color: QColor, threshold: int = 200) -> bool:
@@ -231,12 +239,14 @@ class PetWindow(QWidget):
         pet_count: int = 1,
         exclude_hwnds: set[int] | None = None,
         sprites_dir: Path | None = None,
+        surface_coordinator: SharedSurfaceCoordinator | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._pet_index = pet_index
         self._pet_count = max(1, pet_count)
         self._exclude_hwnds = exclude_hwnds if exclude_hwnds is not None else set()
+        self._surface_coordinator = surface_coordinator
         self._sprites_dir = sprites_dir or get_pet_sprites_dir(pet_index)
         self._start_fraction = (pet_index + 1) / (self._pet_count + 1)
         self._sprite_scale_percent = get_sprite_scale_percent(pet_index)
@@ -255,6 +265,10 @@ class PetWindow(QWidget):
         self._frame_index: int = 0
         self._drag_offset = QPoint(0, 0)
         self._is_dragging: bool = False
+        self._drag_pending: bool = False
+        self._press_global_pos: QPoint | None = None
+        self._poke_anim_active: bool = False
+        self._poke_anim_token: int = 0
         self._play_area: QRect = QRect()
         self._surfaces = SurfaceTracker()
         self._surfaces.set_pet_dimensions(self._pet_width, self._pet_height)
@@ -358,7 +372,11 @@ class PetWindow(QWidget):
         )
         self._frame_index = 0
         set_saved_pet_sprites_dir(self._pet_index, sprites_dir)
-        self._refresh_surfaces()
+        self._refresh_play_area()
+        if self._surface_coordinator is not None:
+            self._surface_coordinator.rebuild_pet(self)
+        else:
+            self._surfaces.refresh(self._play_area, self._exclude_hwnds)
         pos = self.pos()
         self.move(*self._clamp_position(pos.x(), pos.y()))
         self.update()
@@ -385,7 +403,11 @@ class PetWindow(QWidget):
         self._sprites.reload(width=self._pet_width, height=self._pet_height)
         set_saved_pet_sprite_scale_percent(self._pet_index, self._sprite_scale_percent)
         self._frame_index = 0
-        self._refresh_surfaces()
+        self._refresh_play_area()
+        if self._surface_coordinator is not None:
+            self._surface_coordinator.rebuild_pet(self)
+        else:
+            self._surfaces.refresh(self._play_area, self._exclude_hwnds)
         pos = self.pos()
         self.move(*self._clamp_position(pos.x(), pos.y()))
         self.update()
@@ -478,7 +500,10 @@ class PetWindow(QWidget):
         if clamped_x != pos.x() or clamped_y != pos.y():
             self.move(clamped_x, clamped_y)
 
-        self._surfaces.refresh(self._play_area, self._exclude_hwnds)
+        if self._surface_coordinator is not None:
+            self._surface_coordinator.rebuild_pet(self)
+        else:
+            self._surfaces.refresh(self._play_area, self._exclude_hwnds)
         if self._is_dragging:
             return
         if self._motion_paused:
@@ -523,7 +548,10 @@ class PetWindow(QWidget):
         self._cursor_still_ms = 0
         self._cursor_chase_ms_left = 0
         self._climb_ledge = None
-        self._refresh_surfaces()
+        if self._surface_coordinator is not None:
+            self._surface_coordinator.rebuild_pet(self)
+        else:
+            self._refresh_surfaces()
         ledge = self._surfaces.find_ledge_at(self.pos().x(), self.pos().y())
         if ledge is not None:
             self._active_ledge = ledge
@@ -574,7 +602,10 @@ class PetWindow(QWidget):
     def _snap_to_nearest_support(self) -> None:
         """Move the pet onto the current ledge or the screen floor."""
         self._refresh_play_area()
-        self._refresh_surfaces()
+        if self._surface_coordinator is not None:
+            self._surface_coordinator.rebuild_pet(self)
+        else:
+            self._surfaces.refresh(self._play_area, self._exclude_hwnds)
         pos = self.pos()
         ledge = self._surfaces.find_ledge_at(pos.x(), pos.y())
         if ledge is None:
@@ -641,10 +672,13 @@ class PetWindow(QWidget):
         self._move_timer.timeout.connect(self._on_movement_tick)
         self._move_timer.start()
 
-        self._surface_timer = QTimer(self)
-        self._surface_timer.setInterval(SURFACE_REFRESH_MS)
-        self._surface_timer.timeout.connect(self._refresh_surfaces)
-        self._surface_timer.start()
+        if self._surface_coordinator is None:
+            from settings.core import SURFACE_REFRESH_MS
+
+            self._surface_timer = QTimer(self)
+            self._surface_timer.setInterval(SURFACE_REFRESH_MS)
+            self._surface_timer.timeout.connect(self._refresh_surfaces)
+            self._surface_timer.start()
 
         self._ambient_timer = QTimer(self)
         self._ambient_timer.setSingleShot(True)
@@ -770,9 +804,27 @@ class PetWindow(QWidget):
         """Clamp *x* to both the screen and a horizontal ledge."""
         return self._clamp_x(max(ledge.left, min(x, ledge.max_pet_x())))
 
+    def rebuild_surfaces_from_cache(self, windows: list[WindowRect]) -> None:
+        """Rebuild ledges from a shared window scan and sync pet support."""
+        self._refresh_play_area()
+        self._surfaces.rebuild_ledges(self._play_area, windows)
+        self._after_surface_rebuild()
+
     def _refresh_surfaces(self) -> None:
+        if self._surface_coordinator is not None:
+            self._surface_coordinator.refresh()
+            return
         self._refresh_play_area()
         self._surfaces.refresh(self._play_area, self._exclude_hwnds)
+        self._after_surface_rebuild()
+
+    def _rebuild_surfaces_from_cache(self) -> None:
+        if self._surface_coordinator is not None:
+            self._surface_coordinator.rebuild_pet(self)
+            return
+        self._refresh_surfaces()
+
+    def _after_surface_rebuild(self) -> None:
         if not self._is_dragging and self._fsm.state not in (
             PetState.CLIMBING,
             PetState.FALLING,
@@ -882,11 +934,10 @@ class PetWindow(QWidget):
             or self._chat_hold
         ):
             return
-        if self._fsm.state != PetState.FALLING:
-            self._refresh_surfaces()
         if self._fsm.state == PetState.WALKING:
-            self._horizontal_walk_tick()
-            self._handle_peer_interactions()
+            if not self._poke_anim_active:
+                self._horizontal_walk_tick()
+                self._handle_peer_interactions()
         elif self._fsm.state == PetState.CHASING_CURSOR:
             self._cursor_chase_tick()
             self._handle_peer_interactions()
@@ -1235,7 +1286,7 @@ class PetWindow(QWidget):
             return
         if self._fsm.state != PetState.FALLING:
             return
-        self._surfaces.refresh(self._play_area, self._exclude_hwnds)
+        self._rebuild_surfaces_from_cache()
         pos = self.pos()
         new_y = pos.y() + get_effective_gravity_px()
         next_feet_y = new_y + self._pet_height - 1
@@ -1285,7 +1336,7 @@ class PetWindow(QWidget):
                         self._fall_exclude_ledge_id = None
 
     def _is_on_support(self) -> bool:
-        self._refresh_surfaces()
+        self._rebuild_surfaces_from_cache()
         return self._surfaces.find_ledge_at(self.pos().x(), self.pos().y()) is not None
 
     # ------------------------------------------------------------------
@@ -1307,6 +1358,92 @@ class PetWindow(QWidget):
         if self._context_menu_handler is not None:
             self._context_menu_handler(global_pos, self)
 
+    def poke(self) -> None:
+        """React to a double-click poke: phrase, brief sit, or walk-in-place."""
+        if self._click_through or self._is_dragging:
+            return
+        if self._menu_hold or self._chat_hold:
+            return
+        if self._fsm.state in (PetState.FALLING, PetState.CLIMBING, PetState.DRAGGED):
+            return
+
+        self._drag_pending = False
+        self._press_global_pos = None
+        self._cancel_poke_animation()
+
+        roll = random.random()
+        if roll < 1 / 3:
+            self._poke_phrase()
+        elif roll < 2 / 3:
+            self._poke_sit()
+        else:
+            self._poke_brief_animation()
+
+    def _poke_phrase(self) -> None:
+        if self._speech_bubble is not None and self._speech_bubble.isVisible():
+            return
+        phrase = get_ambient_phrase("poke")
+        if phrase is not None:
+            self.show_speech_bubble(phrase)
+
+    def _poke_sit(self) -> None:
+        if self._menu_hold or self._chat_hold:
+            return
+        if self._fsm.state == PetState.SIT:
+            self._fsm.extend_sit()
+        elif not self._motion_paused:
+            self._fsm.begin_sit_for(POKE_SIT_DURATION_MS)
+        self._frame_index = 0
+        self._anim_timer.start()
+        self.update()
+
+    def _poke_brief_animation(self) -> None:
+        if self._motion_paused or self._menu_hold or self._chat_hold:
+            self._poke_sit()
+            return
+        self._poke_anim_active = True
+        self._frame_index = 0
+        self._fsm.force_state(PetState.WALKING)
+        self._anim_timer.start()
+        self._poke_anim_token += 1
+        token = self._poke_anim_token
+        QTimer.singleShot(POKE_ANIMATION_MS, lambda: self._end_poke_animation(token))
+        self.update()
+
+    def _cancel_poke_animation(self) -> None:
+        self._poke_anim_token += 1
+        self._poke_anim_active = False
+
+    def _end_poke_animation(self, token: int | None = None) -> None:
+        if token is not None and token != self._poke_anim_token:
+            return
+        if not self._poke_anim_active:
+            return
+        self._poke_anim_active = False
+        if self._fsm.state != PetState.WALKING:
+            return
+        if self._motion_paused or self._menu_hold or self._chat_hold:
+            return
+        if self._is_on_support():
+            self._fsm.force_state(PetState.IDLE)
+        else:
+            self._active_ledge = None
+            self._fsm.force_state(PetState.FALLING)
+        self.update()
+
+    def _start_drag_at(self, global_pos: QPoint) -> None:
+        self._is_dragging = True
+        self._drag_pending = False
+        self._cursor_sit_active = False
+        self._cursor_still_ms = 0
+        self._cursor_chase_ms_left = 0
+        self._cancel_poke_animation()
+        self._drag_offset = global_pos - self.frameGeometry().topLeft()
+        self._fsm.pause()
+        self._fsm.force_state(PetState.DRAGGED)
+        self._fall_timer.stop()
+        self._climb_ledge = None
+
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.RightButton:
             if not self._click_through:
@@ -1316,18 +1453,29 @@ class PetWindow(QWidget):
             return
         if event.button() != Qt.MouseButton.LeftButton:
             return
-        self._is_dragging = True
-        self._cursor_sit_active = False
-        self._cursor_still_ms = 0
-        self._cursor_chase_ms_left = 0
-        self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-        self._fsm.pause()
-        self._fsm.force_state(PetState.DRAGGED)
-        self._fall_timer.stop()
-        self._climb_ledge = None
+        self._drag_pending = True
+        self._press_global_pos = event.globalPosition().toPoint()
+        self._drag_offset = self._press_global_pos - self.frameGeometry().topLeft()
+        event.accept()
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if self._click_through:
+            return
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+        self.poke()
         event.accept()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if self._drag_pending and not self._is_dragging:
+            if self._press_global_pos is not None:
+                pos = event.globalPosition().toPoint()
+                if (
+                    pos - self._press_global_pos
+                ).manhattanLength() >= DRAG_THRESHOLD_PX:
+                    self._start_drag_at(self._press_global_pos)
+            if not self._is_dragging:
+                return
         if not self._is_dragging:
             return
         new_pos = event.globalPosition().toPoint() - self._drag_offset
@@ -1337,9 +1485,18 @@ class PetWindow(QWidget):
         event.accept()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        if event.button() != Qt.MouseButton.LeftButton or not self._is_dragging:
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+        if self._drag_pending and not self._is_dragging:
+            self._drag_pending = False
+            self._press_global_pos = None
+            event.accept()
+            return
+        if not self._is_dragging:
             return
         self._is_dragging = False
+        self._drag_pending = False
+        self._press_global_pos = None
         if self._motion_paused:
             self._finish_drag_while_paused()
             event.accept()
