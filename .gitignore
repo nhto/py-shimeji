@@ -29,6 +29,11 @@ htmlcov/
 .chat_settings.json
 .app_settings.json
 
+# Signing certificates
+*.pfx
+*.p12
+*.pem
+
 # IDE and editor
 .vscode/
 .idea/

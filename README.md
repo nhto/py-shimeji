@@ -423,3 +423,22 @@ Enable **Click-through (pass mouse clicks)** from the system tray when you want 
 Enable **Pause pets (reduce motion)** from the system tray when you want pets visible but still — useful for meetings, screen sharing, or accessibility. Pets snap to the nearest ledge or floor, stop walking and animating, and stay in a sit pose. The setting is remembered across restarts.
 
 You can still drag pets while paused if click-through is off. Turn pause off to resume normal behavior.
+
+## Privacy and security
+
+py-shimeji runs locally on your machine. Optional features send or store data as described below.
+
+| Data | Stored locally | Sent over the network |
+|------|----------------|------------------------|
+| OpenRouter API key | Plain text in `.env` next to the executable (or project root in dev) | Sent to [OpenRouter](https://openrouter.ai/) as a Bearer token when you chat |
+| Chat messages and images | In memory for the current session only (not persisted to disk) | Sent to OpenRouter when you message Bubu |
+| Chat model / language | `.chat_settings.json` | Not sent except as part of chat API requests |
+| MSAL sign-in tokens | `graph_token_cache` in `.app_settings.json` (plain text) | Used to call Microsoft Graph when Outlook (Graph mode) is connected |
+| Outlook mail notifications | Seen-mail IDs and snooze state in `.app_settings.json` | Mail is read via Outlook COM or Graph on your PC; not uploaded elsewhere |
+| On-screen / tray alerts | — | Sender, subject, and up to ~60 characters of body preview shown in speech bubbles or the system tray |
+
+**What is not logged:** Outlook debug logs record sender and subject only — never full message bodies.
+
+**Auto-updates:** Frozen builds may download release zips from [GitHub Releases](https://github.com/nhto/py-shimeji/releases) over HTTPS. User files (`.env`, `.app_settings.json`, `.chat_settings.json`) are preserved during updates.
+
+**Reporting issues:** If you find a security vulnerability, please open a [GitHub issue](https://github.com/nhto/py-shimeji/issues) or contact the maintainer privately rather than posting details publicly.
