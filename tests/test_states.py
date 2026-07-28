@@ -16,7 +16,7 @@ def test_force_state_notifies_listener(qapp) -> None:
 
     machine.force_state(PetState.SIT)
     assert machine.state == PetState.SIT
-    assert changes[-1] == (PetState.WALKING, PetState.SIT)
+    assert changes[-1] == (PetState.IDLE, PetState.SIT)
 
 
 def test_begin_cursor_chase_enters_chase_state(qapp) -> None:
@@ -81,3 +81,24 @@ def test_begin_sit_for_uses_fixed_duration(qapp) -> None:
     machine.begin_sit_for(1_500)
     assert machine.state == PetState.SIT
     assert machine._next_idle_walk_ms == 1_500
+
+
+def test_walking_transitions_to_idle_when_timer_expires(qapp) -> None:
+    machine = PetStateMachine(on_state_changed=lambda *_: None)
+    machine._behavior_timer.stop()
+    machine.force_state(PetState.WALKING)
+    machine._next_idle_walk_ms = 100
+
+    machine._on_behavior_tick()
+    assert machine.state == PetState.IDLE
+
+
+def test_boundary_hit_does_not_extend_walk_timer(qapp) -> None:
+    machine = PetStateMachine(on_state_changed=lambda *_: None)
+    machine._behavior_timer.stop()
+    machine.force_state(PetState.WALKING)
+    machine._next_idle_walk_ms = 250
+
+    machine.notify_boundary_hit()
+    machine._on_behavior_tick()
+    assert machine.state == PetState.IDLE

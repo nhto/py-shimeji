@@ -13,6 +13,7 @@ from codex_pet import (
     CELL_WIDTH,
     GRID_COLUMNS,
     V1_ROWS,
+    _extract_cell,
     convert_codex_pet,
     grid_for_image_size,
     is_codex_pack,
@@ -83,6 +84,31 @@ def test_resolve_codex_frames_maps_idle_and_walk(codex_pack: Path) -> None:
     assert len(frames["walk"]) == 2
     assert frames["idle"][0].is_file()
     assert frames["walk"][0].is_file()
+
+
+def test_extract_cell_shaves_adjacent_frame_bleed(qapp) -> None:
+    width = GRID_COLUMNS * CELL_WIDTH
+    height = V1_ROWS * CELL_HEIGHT
+    image = QImage(width, height, QImage.Format.Format_ARGB32)
+    image.fill(QColor(0, 0, 0, 0))
+
+    for py in range(CELL_HEIGHT):
+        for px in range(CELL_WIDTH - 4):
+            image.setPixelColor(px, py, QColor(255, 255, 255, 255))
+    for py in range(CELL_HEIGHT):
+        for px in range(CELL_WIDTH, CELL_WIDTH + 4):
+            image.setPixelColor(px, py, QColor(139, 69, 19, 255))
+
+    grid = grid_for_image_size(width, height, sprite_version=1)
+    assert grid is not None
+    cell = _extract_cell(image, 0, 0, grid)
+    assert cell.width() < CELL_WIDTH
+    for py in range(cell.height()):
+        for px in range(cell.width()):
+            color = cell.pixelColor(px, py)
+            if color.alpha() > 0:
+                assert color.red() > 200
+                assert color.blue() > 200
 
 
 def test_convert_codex_pet_writes_native_pngs(codex_pack: Path, tmp_path: Path) -> None:

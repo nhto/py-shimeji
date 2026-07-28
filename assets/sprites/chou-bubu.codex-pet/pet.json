@@ -1,0 +1,7 @@
+{
+  "id": "chou-bubu",
+  "displayName": "Chou BuBu",
+  "description": "Chou BuBu built from the user's local BuBu GIF sticker set.",
+  "spritesheetPath": "spritesheet.webp",
+  "kind": "object"
+}

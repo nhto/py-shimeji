@@ -17,6 +17,8 @@ V1_SIZE = (GRID_COLUMNS * CELL_WIDTH, V1_ROWS * CELL_HEIGHT)
 V2_SIZE = (GRID_COLUMNS * CELL_WIDTH, V2_ROWS * CELL_HEIGHT)
 
 _CACHE_DIR_NAME = ".py-shimeji-cache"
+_CACHE_FORMAT_VERSION = 2
+_ATLAS_EDGE_INSET_PX = 2
 _PET_JSON_NAME = "pet.json"
 _SPRITESHEET_NAMES: tuple[str, ...] = (
     "spritesheet.webp",
@@ -144,21 +146,71 @@ def grid_for_image_size(
 
 def _cell_is_empty(image, row: int, col: int, grid: CodexGrid) -> bool:
     """Return True when a grid cell has no visible pixels."""
-    x = col * grid.cell_width
-    y = row * grid.cell_height
-    for py in range(y, y + grid.cell_height):
-        for px in range(x, x + grid.cell_width):
+    x, y, width, height = _cell_crop_rect(row, col, grid)
+    for py in range(y, y + height):
+        for px in range(x, x + width):
             if image.pixelColor(px, py).alpha() > 0:
                 return False
     return True
 
 
-def _extract_cell(image, row: int, col: int, grid: CodexGrid):
-    """Copy one spritesheet cell into a new image."""
-    QImage = _load_qimage()
+def _cell_crop_rect(row: int, col: int, grid: CodexGrid) -> tuple[int, int, int, int]:
+    """Return ``(x, y, width, height)`` for a grid cell, shaving shared atlas edges."""
+    inset = _ATLAS_EDGE_INSET_PX
     x = col * grid.cell_width
     y = row * grid.cell_height
-    return image.copy(x, y, grid.cell_width, grid.cell_height)
+    left_inset = 0 if col == 0 else inset
+    right_inset = 0 if col == GRID_COLUMNS - 1 else inset
+    top_inset = 0 if row == 0 else inset
+    bottom_inset = 0 if row == grid.rows - 1 else inset
+    return (
+        x + left_inset,
+        y + top_inset,
+        grid.cell_width - left_inset - right_inset,
+        grid.cell_height - top_inset - bottom_inset,
+    )
+
+
+def _trim_transparent_margins(image, *, alpha_threshold: int = 8, margin: int = 0):
+    """Crop away fully transparent borders around sprite content."""
+    width = image.width()
+    height = image.height()
+    if width == 0 or height == 0:
+        return image
+
+    min_x = width
+    min_y = height
+    max_x = 0
+    max_y = 0
+    found = False
+
+    for py in range(height):
+        for px in range(width):
+            if image.pixelColor(px, py).alpha() > alpha_threshold:
+                found = True
+                min_x = min(min_x, px)
+                min_y = min(min_y, py)
+                max_x = max(max_x, px)
+                max_y = max(max_y, py)
+
+    if not found:
+        return image
+
+    min_x = max(0, min_x - margin)
+    min_y = max(0, min_y - margin)
+    max_x = min(width - 1, max_x + margin)
+    max_y = min(height - 1, max_y + margin)
+    return image.copy(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
+
+
+def _extract_cell(image, row: int, col: int, grid: CodexGrid):
+    """Copy one spritesheet cell into a new image."""
+    x, y, width, height = _cell_crop_rect(row, col, grid)
+    if width <= 0 or height <= 0:
+        QImage = _load_qimage()
+        return QImage()
+    cell = image.copy(x, y, width, height)
+    return _trim_transparent_margins(cell)
 
 
 def _cache_dir(pack_dir: Path) -> Path:
@@ -182,7 +234,7 @@ def _read_cache_stamp(pack_dir: Path) -> str | None:
 def _write_cache_stamp(pack_dir: Path, spritesheet: Path) -> None:
     cache = _cache_dir(pack_dir)
     cache.mkdir(parents=True, exist_ok=True)
-    stamp = f"{spritesheet.resolve()}|{spritesheet.stat().st_mtime_ns}"
+    stamp = f"v{_CACHE_FORMAT_VERSION}|{spritesheet.resolve()}|{spritesheet.stat().st_mtime_ns}"
     _cache_stamp_path(pack_dir).write_text(stamp, encoding="utf-8")
 
 
@@ -190,7 +242,7 @@ def _cache_is_current(pack_dir: Path, spritesheet: Path) -> bool:
     stamp = _read_cache_stamp(pack_dir)
     if stamp is None:
         return False
-    expected = f"{spritesheet.resolve()}|{spritesheet.stat().st_mtime_ns}"
+    expected = f"v{_CACHE_FORMAT_VERSION}|{spritesheet.resolve()}|{spritesheet.stat().st_mtime_ns}"
     return stamp == expected
 
 

@@ -47,11 +47,11 @@ class PetStateMachine(QObject):
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
-        self._state: PetState = PetState.WALKING
+        self._state: PetState = PetState.IDLE
         self._direction: int = 1  # 1 = right, -1 = left
         self._on_state_changed = on_state_changed
         self._paused: bool = False
-        self._next_idle_walk_ms: int = self._random_walk_duration()
+        self._next_idle_walk_ms: int = self._random_idle_duration()
         self._next_sit_ms: int = self._random_idle_to_sit_duration()
 
         self._behavior_timer = QTimer(self)
@@ -121,8 +121,9 @@ class PetStateMachine(QObject):
 
     def notify_boundary_hit(self) -> None:
         """Called when the pet reaches a horizontal screen edge while walking."""
-        if self._state == PetState.WALKING:
-            self._next_idle_walk_ms = self._random_walk_duration()
+        # Direction is flipped by movement code; do not extend the walk timer here
+        # or pets ping-pong across the screen without ever resting.
+        return
 
     # ------------------------------------------------------------------
     # Internal behavior loop

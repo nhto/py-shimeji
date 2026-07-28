@@ -10,6 +10,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import QPoint, QPointF, QRect, Qt, QTimer
 from PyQt6.QtGui import (
+    QBitmap,
     QBrush,
     QColor,
     QContextMenuEvent,
@@ -124,19 +125,43 @@ def _key_out_background(image: QImage, threshold: int = 200) -> QImage:
     return image
 
 
+def _has_transparent_border(image: QImage, *, alpha_threshold: int = 128) -> bool:
+    """True when any image border pixel is already transparent."""
+    width, height = image.width(), image.height()
+    if width == 0 or height == 0:
+        return False
+
+    def transparent(x: int, y: int) -> bool:
+        return image.pixelColor(x, y).alpha() < alpha_threshold
+
+    for x in range(width):
+        if transparent(x, 0) or transparent(x, height - 1):
+            return True
+    for y in range(height):
+        if transparent(0, y) or transparent(width - 1, y):
+            return True
+    return False
+
+
 def _prepare_sprite(path: Path, width: int, height: int) -> QPixmap | None:
     """Load, scale, de-background, and center a sprite frame."""
     image = QImage(str(path))
     if image.isNull():
         return None
 
+    scale_mode = (
+        Qt.TransformationMode.FastTransformation
+        if image.width() > width or image.height() > height
+        else Qt.TransformationMode.SmoothTransformation
+    )
     scaled = image.scaled(
         width,
         height,
         Qt.AspectRatioMode.KeepAspectRatio,
-        Qt.TransformationMode.SmoothTransformation,
+        scale_mode,
     )
-    scaled = _key_out_background(scaled)
+    if not _has_transparent_border(scaled):
+        scaled = _key_out_background(scaled)
 
     canvas = QImage(width, height, QImage.Format.Format_ARGB32)
     canvas.fill(Qt.GlobalColor.transparent)
@@ -854,13 +879,11 @@ class PetWindow(QWidget):
                 self._start_fall()
                 return
             self._active_ledge = ledge
-            if self._fsm.state == PetState.SIT:
+            if self._fsm.state in (PetState.SIT, PetState.IDLE):
                 stand_y = self._clamp_y(ledge.stand_y)
                 if pos.y() != stand_y:
                     self.move(self._clamp_x(pos.x()), stand_y)
                 return
-            if self._fsm.state == PetState.IDLE:
-                self._fsm.begin_walking()
             return
 
         self._active_ledge = None
@@ -1528,30 +1551,33 @@ class PetWindow(QWidget):
             pixmap = frames[self._frame_index % len(frames)]
 
         if pixmap is not None and not pixmap.isNull():
-            self._paint_sprite(painter, pixmap)
-            self._apply_sprite_mask(pixmap)
+            display_pixmap = self._pixmap_for_direction(pixmap)
+            self._paint_sprite(painter, display_pixmap)
+            self._apply_sprite_mask(display_pixmap)
         else:
             self._paint_fallback(painter)
             self.clearMask()
 
         painter.end()
 
+    def _pixmap_for_direction(self, pixmap: QPixmap) -> QPixmap:
+        """Mirror sprite frames when facing left so paint and mask stay aligned."""
+        if self._fsm.direction >= 0:
+            return pixmap
+        flipped = QPixmap.fromImage(pixmap.toImage().mirrored(True, False))
+        return flipped if not flipped.isNull() else pixmap
+
     def _apply_sprite_mask(self, pixmap: QPixmap) -> None:
-        """Clip the native window to the sprite silhouette (needed on Windows)."""
-        mask = pixmap.createHeuristicMask()
+        """Clip the native window to the sprite alpha (needed on Windows)."""
+        image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+        mask_image = image.createAlphaMask()
+        mask = QBitmap.fromImage(mask_image)
         if not mask.isNull():
             self.setMask(mask)
 
     def _paint_sprite(self, painter: QPainter, pixmap: QPixmap) -> None:
         target = QRect(0, 0, self._pet_width, self._pet_height)
-        if self._fsm.direction < 0:
-            painter.save()
-            painter.translate(self._pet_width, 0)
-            painter.scale(-1, 1)
-            painter.drawPixmap(target, pixmap)
-            painter.restore()
-        else:
-            painter.drawPixmap(target, pixmap)
+        painter.drawPixmap(target, pixmap)
 
     def _paint_fallback(self, painter: QPainter) -> None:
         """Draw a simple cartoon blob when sprite PNGs are missing."""
