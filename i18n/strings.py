@@ -203,16 +203,19 @@ SPRITE_PICKER_CANCEL_LABELS: dict[str, str] = {
 
 SPRITE_PICKER_INVALID_FOLDER_LABELS: dict[str, str] = {
     "en": (
-        "That folder does not contain py-shimeji PNGs (idle_1.png, …) "
-        "or a Shimeji pack (conf/actions.xml plus image files)."
+        "That folder does not contain py-shimeji PNGs (idle_1.png, …), "
+        "a Shimeji pack (conf/actions.xml plus image files), "
+        "or a Codex Pet pack (pet.json plus spritesheet.webp/png)."
     ),
     "zh-Hans": (
-        "该文件夹不包含 py-shimeji 的 PNG（idle_1.png 等），"
-        "也不是 Shimeji 形象包（conf/actions.xml 与图片文件）。"
+        "该文件夹不包含 py-shimeji 的 PNG（idle_1.png 等）、"
+        "Shimeji 形象包（conf/actions.xml 与图片文件），"
+        "或 Codex Pet 包（pet.json 与 spritesheet.webp/png）。"
     ),
     "zh-Hant": (
-        "該資料夾不包含 py-shimeji 的 PNG（idle_1.png 等），"
-        "也不是 Shimeji 形象包（conf/actions.xml 與圖片檔案）。"
+        "該資料夾不包含 py-shimeji 的 PNG（idle_1.png 等）、"
+        "Shimeji 形象包（conf/actions.xml 與圖片檔案），"
+        "或 Codex Pet 包（pet.json 與 spritesheet.webp/png）。"
     ),
 }
 
@@ -222,6 +225,12 @@ SPRITE_PICKER_SHIMEJI_HINT_LABELS: dict[str, str] = {
     "zh-Hant": "已識別 Shimeji 形象包 — 將自動從 actions.xml 對應幀。",
 }
 
+SPRITE_PICKER_CODEX_HINT_LABELS: dict[str, str] = {
+    "en": "Codex Pet pack detected — frames are sliced from the spritesheet automatically.",
+    "zh-Hans": "已识别 Codex Pet 包 — 将自动从 spritesheet 切片映射帧。",
+    "zh-Hant": "已識別 Codex Pet 包 — 將自動從 spritesheet 切片對應幀。",
+}
+
 SPRITE_PICKER_IMPORT_LABELS: dict[str, str] = {
     "en": "Convert to py-shimeji PNGs…",
     "zh-Hans": "转换为 py-shimeji PNG…",
@@ -229,15 +238,15 @@ SPRITE_PICKER_IMPORT_LABELS: dict[str, str] = {
 }
 
 SPRITE_PICKER_IMPORT_DONE_LABELS: dict[str, str] = {
-    "en": "Converted Shimeji pack to:\n{path}",
-    "zh-Hans": "已将 Shimeji 形象包转换到：\n{path}",
-    "zh-Hant": "已將 Shimeji 形象包轉換到：\n{path}",
+    "en": "Converted sprite pack to:\n{path}",
+    "zh-Hans": "已将形象包转换到：\n{path}",
+    "zh-Hant": "已將形象包轉換到：\n{path}",
 }
 
 SPRITE_PICKER_IMPORT_FAILED_LABELS: dict[str, str] = {
-    "en": "Could not convert that Shimeji pack.",
-    "zh-Hans": "无法转换该 Shimeji 形象包。",
-    "zh-Hant": "無法轉換該 Shimeji 形象包。",
+    "en": "Could not convert that sprite pack.",
+    "zh-Hans": "无法转换该形象包。",
+    "zh-Hant": "無法轉換該形象包。",
 }
 
 TRAY_CHAT_LABELS: dict[str, str] = {

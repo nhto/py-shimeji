@@ -27,6 +27,7 @@ from config import (
     SPRITE_PICKER_APPLY_LABELS,
     SPRITE_PICKER_BROWSE_LABELS,
     SPRITE_PICKER_CANCEL_LABELS,
+    SPRITE_PICKER_CODEX_HINT_LABELS,
     SPRITE_PICKER_FILES_HEADING_LABELS,
     SPRITE_PICKER_IMPORT_DONE_LABELS,
     SPRITE_PICKER_IMPORT_FAILED_LABELS,
@@ -52,6 +53,7 @@ from config import (
     sprite_pack_display_name,
     sprite_state_label,
 )
+from codex_pet import convert_codex_pet
 from shimeji_pack import (
     convert_shimeji_pack,
     iter_sprite_display_entries,
@@ -363,11 +365,11 @@ class SpritePickerDialog(QDialog):
         self._scale_hint.setStyleSheet(DIALOG_HINT_STYLE)
         layout.addWidget(self._scale_hint)
 
-        self._shimeji_hint = QLabel()
-        self._shimeji_hint.setObjectName("spriteShimejiHint")
-        self._shimeji_hint.setWordWrap(True)
-        self._shimeji_hint.hide()
-        layout.addWidget(self._shimeji_hint)
+        self._pack_hint = QLabel()
+        self._pack_hint.setObjectName("spriteShimejiHint")
+        self._pack_hint.setWordWrap(True)
+        self._pack_hint.hide()
+        layout.addWidget(self._pack_hint)
 
         self._file_panel = _SpriteFilePanel(parent=root)
         layout.addWidget(self._file_panel)
@@ -395,7 +397,7 @@ class SpritePickerDialog(QDialog):
 
         self._import_button = QPushButton()
         self._import_button.setObjectName("importButton")
-        self._import_button.clicked.connect(self._import_shimeji_pack)
+        self._import_button.clicked.connect(self._import_sprite_pack)
         self._import_button.hide()
         button_row.addWidget(self._import_button)
         button_row.addStretch()
@@ -436,7 +438,7 @@ class SpritePickerDialog(QDialog):
         self._import_button.setText(localized(SPRITE_PICKER_IMPORT_LABELS, self._language))
         self._apply_button.setText(localized(SPRITE_PICKER_APPLY_LABELS, self._language))
         self._cancel_button.setText(localized(SPRITE_PICKER_CANCEL_LABELS, self._language))
-        self._update_shimeji_hint()
+        self._update_pack_hint()
 
     def _load_scale_slider(self) -> None:
         self._scale_slider.setValue(self._sprite_scale_percent)
@@ -474,28 +476,38 @@ class SpritePickerDialog(QDialog):
             self._cards.append(card)
 
         self._file_panel.set_folder(self._selected_dir)
-        self._update_shimeji_hint()
+        self._update_pack_hint()
 
     def _select_dir(self, sprites_dir: Path) -> None:
         self._selected_dir = sprites_dir.resolve()
         for card in self._cards:
             card.set_selected(card.sprites_dir.resolve() == self._selected_dir)
         self._file_panel.set_folder(self._selected_dir)
-        self._update_shimeji_hint()
+        self._update_pack_hint()
 
-    def _update_shimeji_hint(self) -> None:
-        is_shimeji = sprite_pack_kind(self._selected_dir) == "shimeji"
-        if is_shimeji:
-            self._shimeji_hint.setText(
+    def _update_pack_hint(self) -> None:
+        kind = sprite_pack_kind(self._selected_dir)
+        if kind == "shimeji":
+            self._pack_hint.setText(
                 localized(SPRITE_PICKER_SHIMEJI_HINT_LABELS, self._language)
             )
-            self._shimeji_hint.show()
+            self._pack_hint.show()
+            self._import_button.show()
+        elif kind == "codex":
+            self._pack_hint.setText(
+                localized(SPRITE_PICKER_CODEX_HINT_LABELS, self._language)
+            )
+            self._pack_hint.show()
             self._import_button.show()
         else:
-            self._shimeji_hint.hide()
+            self._pack_hint.hide()
             self._import_button.hide()
 
-    def _import_shimeji_pack(self) -> None:
+    def _import_sprite_pack(self) -> None:
+        kind = sprite_pack_kind(self._selected_dir)
+        if kind not in {"shimeji", "codex"}:
+            return
+
         base_name = self._selected_dir.name
         dest = SPRITES_ROOT / "imported" / base_name
         suffix = 1
@@ -503,7 +515,12 @@ class SpritePickerDialog(QDialog):
             suffix += 1
             dest = SPRITES_ROOT / "imported" / f"{base_name}_{suffix}"
 
-        if not convert_shimeji_pack(self._selected_dir, dest):
+        if kind == "shimeji":
+            converted = convert_shimeji_pack(self._selected_dir, dest)
+        else:
+            converted = convert_codex_pet(self._selected_dir, dest)
+
+        if not converted:
             QMessageBox.warning(
                 self,
                 localized(SPRITE_PICKER_TITLE_LABELS, self._language).format(

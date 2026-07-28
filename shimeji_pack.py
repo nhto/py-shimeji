@@ -200,11 +200,15 @@ def is_shimeji_pack(sprites_dir: Path) -> bool:
 
 
 def sprite_pack_kind(sprites_dir: Path) -> str:
-    """Return ``native``, ``shimeji``, or ``none`` for a sprite folder."""
+    """Return ``native``, ``shimeji``, ``codex``, or ``none`` for a sprite folder."""
     if has_native_sprites(sprites_dir):
         return "native"
     if is_shimeji_pack(sprites_dir):
         return "shimeji"
+    from codex_pet import is_codex_pack
+
+    if is_codex_pack(sprites_dir):
+        return "codex"
     return "none"
 
 
@@ -225,6 +229,12 @@ def resolve_sprite_frame_paths(sprites_dir: Path) -> dict[str, list[Path]]:
     shimeji = resolve_shimeji_frames(sprites_dir)
     if shimeji:
         return shimeji
+
+    from codex_pet import resolve_codex_frames
+
+    codex = resolve_codex_frames(sprites_dir)
+    if codex:
+        return codex
 
     return {
         state: [sprites_dir / name for name in filenames]
@@ -271,6 +281,8 @@ def iter_sprite_display_entries(
             path = paths[index] if index < len(paths) else None
             present = path is not None and path.is_file()
             if kind == "shimeji" and present and path is not None:
+                label = f"{filename} ← {path.name}"
+            elif kind == "codex" and present and path is not None:
                 label = f"{filename} ← {path.name}"
             else:
                 label = filename

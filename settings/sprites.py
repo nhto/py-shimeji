@@ -82,12 +82,17 @@ def _legacy_shared_sprites_present() -> bool:
 
 
 def pet_has_sprites(sprites_dir: Path) -> bool:
-    """True when the folder contains native or Shimeji community sprite frames."""
+    """True when the folder contains native, Shimeji, or Codex sprite frames."""
+    from codex_pet import is_codex_pack
     from shimeji_pack import has_native_sprites, is_shimeji_pack
 
     if not sprites_dir.is_dir():
         return False
-    return has_native_sprites(sprites_dir) or is_shimeji_pack(sprites_dir)
+    return (
+        has_native_sprites(sprites_dir)
+        or is_shimeji_pack(sprites_dir)
+        or is_codex_pack(sprites_dir)
+    )
 
 
 def iter_sprite_file_entries() -> list[tuple[str, str, bool]]:

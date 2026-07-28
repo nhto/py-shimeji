@@ -256,6 +256,7 @@ py-shimeji/
 ├── dialog_theme.py  # Shared styling for dialogs and chat
 ├── sprite_picker_dialog.py  # Visual sprite pack picker
 ├── shimeji_pack.py          # Shimeji actions.xml compatibility layer
+├── codex_pet.py             # Codex Pet spritesheet compatibility layer
 ├── outlook_models.py        # MailItem / CalendarEvent dataclasses
 ├── outlook_com_client.py    # Classic Outlook COM client (Windows)
 ├── outlook_com_constants.py # MAPI folder/property constants
@@ -281,6 +282,7 @@ py-shimeji/
 │   ├── sign.ps1               # Authenticode signing helper
 │   ├── installer.iss          # Inno Setup installer script
 │   ├── convert_shimeji_pack.py  # Shimeji actions.xml → py-shimeji PNG converter
+│   ├── convert_codex_pet.py     # Codex Pet spritesheet → py-shimeji PNG converter
 │   ├── test_outlook_com.py    # Phase 0: Outlook COM feasibility check (Windows)
 │   └── demo_outlook_com_client.py  # Phase 1: inbox/calendar COM client demo
 ├── assets/
@@ -353,6 +355,24 @@ python scripts/convert_shimeji_pack.py "C:\path\to\ShimejiPack"
 ```
 
 Converted packs are written to `assets/sprites/imported/<pack-name>/` and appear in the sprite picker grid.
+
+### Codex Pet packs (spritesheet)
+
+[Codex Pets](https://codexpet.xyz/spec/) use a `pet.json` manifest plus a single `spritesheet.webp` (or `.png`) atlas — typically 1536×1872 (v1) or 1536×2288 (v2) with an 8-column grid of 192×208 px cells. py-shimeji loads these packs directly — point **Change Pet N sprites...** at the Codex pet folder (the one that contains `pet.json` and the spritesheet), or at `~/.codex/pets/<pet-id>/` on your machine.
+
+| py-shimeji state | Mapped from Codex spritesheet row |
+|------------------|-----------------------------------|
+| Idle             | Row 0 (`idle`)                    |
+| Walk             | Row 1 (`running-right`)           |
+| Sit              | Row 6 (`waiting`)                 |
+| Fall             | Row 4 (`jumping`)                 |
+| Drag             | Row 5 (`failed`)                  |
+
+To permanently convert a pack to native PNG names, use the **Convert to py-shimeji PNGs…** button in the sprite picker, or run:
+
+```bash
+python scripts/convert_codex_pet.py "C:\Users\you\.codex\pets\codie"
+```
 
 ## Controls
 
