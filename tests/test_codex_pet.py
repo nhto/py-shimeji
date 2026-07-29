@@ -12,6 +12,7 @@ from codex_pet import (
     CELL_HEIGHT,
     CELL_WIDTH,
     GRID_COLUMNS,
+    STATE_ROW_FRAMES,
     V1_ROWS,
     _extract_cell,
     convert_codex_pet,
@@ -109,6 +110,11 @@ def test_extract_cell_shaves_adjacent_frame_bleed(qapp) -> None:
             if color.alpha() > 0:
                 assert color.red() > 200
                 assert color.blue() > 200
+
+
+def test_codex_drag_uses_jumping_row_not_failed() -> None:
+    assert STATE_ROW_FRAMES["drag"] == [(4, 0)]
+    assert STATE_ROW_FRAMES["drag"] != [(5, 0)]
 
 
 def test_convert_codex_pet_writes_native_pngs(codex_pack: Path, tmp_path: Path) -> None:

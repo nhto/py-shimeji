@@ -10,7 +10,6 @@ from pathlib import Path
 
 from PyQt6.QtCore import QPoint, QPointF, QRect, Qt, QTimer
 from PyQt6.QtGui import (
-    QBitmap,
     QBrush,
     QColor,
     QContextMenuEvent,
@@ -315,6 +314,11 @@ class PetWindow(QWidget):
         self._idle_chase_accum_ms: int = 0
         self._speech_bubble: SpeechBubbleWindow | None = None
         self._was_falling: bool = False
+        self._applied_sprite_mask_key: tuple[PetState, int, int] | None = None
+        self._pending_sprite_mask_key: tuple[PetState, int, int] | None = None
+        self._pending_sprite_mask_pixmap: QPixmap | None = None
+        self._sprite_mask_sync_scheduled: bool = False
+        self._flipped_pixmap_cache: dict[tuple[PetState, int], QPixmap] = {}
 
         self._fsm = PetStateMachine(self._on_fsm_state_changed, parent=self)
 
@@ -396,6 +400,7 @@ class PetWindow(QWidget):
             height=self._pet_height,
         )
         self._frame_index = 0
+        self._invalidate_sprite_display_cache()
         set_saved_pet_sprites_dir(self._pet_index, sprites_dir)
         self._refresh_play_area()
         if self._surface_coordinator is not None:
@@ -428,6 +433,7 @@ class PetWindow(QWidget):
         self._sprites.reload(width=self._pet_width, height=self._pet_height)
         set_saved_pet_sprite_scale_percent(self._pet_index, self._sprite_scale_percent)
         self._frame_index = 0
+        self._invalidate_sprite_display_cache()
         self._refresh_play_area()
         if self._surface_coordinator is not None:
             self._surface_coordinator.rebuild_pet(self)
@@ -920,8 +926,18 @@ class PetWindow(QWidget):
     # State machine callbacks
     # ------------------------------------------------------------------
 
+    def _invalidate_sprite_display_cache(self) -> None:
+        """Drop cached flip/mask state after sprites or animation change."""
+        self._applied_sprite_mask_key = None
+        self._pending_sprite_mask_key = None
+        self._pending_sprite_mask_pixmap = None
+        self._sprite_mask_sync_scheduled = False
+        self._flipped_pixmap_cache.clear()
+        self.clearMask()
+
     def _on_fsm_state_changed(self, old: PetState, new: PetState) -> None:
         self._frame_index = 0
+        self._invalidate_sprite_display_cache()
         if new == PetState.SIT and old != PetState.CHASING_CURSOR:
             self._cursor_sit_active = False
         if new != PetState.CHASING_CURSOR and old == PetState.CHASING_CURSOR:
@@ -1462,10 +1478,12 @@ class PetWindow(QWidget):
         self._cursor_chase_ms_left = 0
         self._cancel_poke_animation()
         self._drag_offset = global_pos - self.frameGeometry().topLeft()
+        self._invalidate_sprite_display_cache()
         self._fsm.pause()
         self._fsm.force_state(PetState.DRAGGED)
         self._fall_timer.stop()
         self._climb_ledge = None
+        self.update()
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.RightButton:
@@ -1522,6 +1540,7 @@ class PetWindow(QWidget):
         self._press_global_pos = None
         if self._motion_paused:
             self._finish_drag_while_paused()
+            self.update()
             event.accept()
             return
         self._fsm.resume()
@@ -1551,33 +1570,98 @@ class PetWindow(QWidget):
             pixmap = frames[self._frame_index % len(frames)]
 
         if pixmap is not None and not pixmap.isNull():
-            display_pixmap = self._pixmap_for_direction(pixmap)
-            self._paint_sprite(painter, display_pixmap)
-            self._apply_sprite_mask(display_pixmap)
+            self._paint_sprite(painter, pixmap)
+            if not self._is_dragging:
+                self._schedule_sprite_mask_sync(self._mask_pixmap_for(pixmap))
         else:
             self._paint_fallback(painter)
-            self.clearMask()
+            if not self._is_dragging:
+                self._schedule_sprite_mask_clear()
 
         painter.end()
 
-    def _pixmap_for_direction(self, pixmap: QPixmap) -> QPixmap:
-        """Mirror sprite frames when facing left so paint and mask stay aligned."""
-        if self._fsm.direction >= 0:
-            return pixmap
-        flipped = QPixmap.fromImage(pixmap.toImage().mirrored(True, False))
-        return flipped if not flipped.isNull() else pixmap
+    def _current_sprite_mask_key(self) -> tuple[PetState, int, int]:
+        return (self._fsm.state, self._frame_index, self._fsm.direction)
 
-    def _apply_sprite_mask(self, pixmap: QPixmap) -> None:
-        """Clip the native window to the sprite alpha (needed on Windows)."""
-        image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
-        mask_image = image.createAlphaMask()
-        mask = QBitmap.fromImage(mask_image)
-        if not mask.isNull():
-            self.setMask(mask)
+    def _mask_pixmap_for(self, pixmap: QPixmap) -> QPixmap:
+        """Return the pixmap shape used for hit-testing mask generation."""
+        if self._fsm.state == PetState.DRAGGED or self._fsm.direction >= 0:
+            return pixmap
+
+        cache_key = (self._fsm.state, self._frame_index)
+        cached = self._flipped_pixmap_cache.get(cache_key)
+        if cached is not None and not cached.isNull():
+            return cached
+
+        flipped = QPixmap.fromImage(pixmap.toImage().mirrored(True, False))
+        if flipped.isNull():
+            return pixmap
+        self._flipped_pixmap_cache[cache_key] = flipped
+        return flipped
+
+    def _schedule_sprite_mask_sync(self, pixmap: QPixmap) -> None:
+        """Queue a native-window mask update outside paint (Windows glitches otherwise)."""
+        if self._is_dragging:
+            return
+        key = self._current_sprite_mask_key()
+        if key == self._applied_sprite_mask_key:
+            return
+        self._pending_sprite_mask_key = key
+        self._pending_sprite_mask_pixmap = pixmap
+        if self._sprite_mask_sync_scheduled:
+            return
+        self._sprite_mask_sync_scheduled = True
+        QTimer.singleShot(0, self._apply_pending_sprite_mask)
+
+    def _schedule_sprite_mask_clear(self) -> None:
+        """Queue clearing the native-window mask outside paint."""
+        if self._is_dragging or self._applied_sprite_mask_key is None:
+            return
+        self._pending_sprite_mask_key = None
+        self._pending_sprite_mask_pixmap = None
+        if self._sprite_mask_sync_scheduled:
+            return
+        self._sprite_mask_sync_scheduled = True
+        QTimer.singleShot(0, self._apply_pending_sprite_mask)
+
+    def _apply_pending_sprite_mask(self) -> None:
+        self._sprite_mask_sync_scheduled = False
+        if self._is_dragging:
+            self._pending_sprite_mask_key = None
+            self._pending_sprite_mask_pixmap = None
+            return
+
+        key = self._pending_sprite_mask_key
+        pixmap = self._pending_sprite_mask_pixmap
+        self._pending_sprite_mask_key = None
+        self._pending_sprite_mask_pixmap = None
+
+        if key is None:
+            if self._applied_sprite_mask_key is not None:
+                self.clearMask()
+                self._applied_sprite_mask_key = None
+            return
+
+        if key != self._current_sprite_mask_key() or pixmap is None or pixmap.isNull():
+            return
+
+        mask = pixmap.createHeuristicMask()
+        if mask.isNull():
+            return
+        self.setMask(mask)
+        self._applied_sprite_mask_key = key
 
     def _paint_sprite(self, painter: QPainter, pixmap: QPixmap) -> None:
         target = QRect(0, 0, self._pet_width, self._pet_height)
-        painter.drawPixmap(target, pixmap)
+        face_left = self._fsm.direction < 0 and self._fsm.state != PetState.DRAGGED
+        if face_left:
+            painter.save()
+            painter.translate(self._pet_width, 0)
+            painter.scale(-1, 1)
+            painter.drawPixmap(target, pixmap)
+            painter.restore()
+        else:
+            painter.drawPixmap(target, pixmap)
 
     def _paint_fallback(self, painter: QPainter) -> None:
         """Draw a simple cartoon blob when sprite PNGs are missing."""

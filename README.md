@@ -366,7 +366,7 @@ Converted packs are written to `assets/sprites/imported/<pack-name>/` and appear
 | Walk             | Row 1 (`running-right`)           |
 | Sit              | Row 6 (`waiting`)                 |
 | Fall             | Row 4 (`jumping`)                 |
-| Drag             | Row 5 (`failed`)                  |
+| Drag             | Row 4 (`jumping`, in-air while held) |
 
 To permanently convert a pack to native PNG names, use the **Convert to py-shimeji PNGs…** button in the sprite picker, or run:
 

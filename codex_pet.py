@@ -17,7 +17,7 @@ V1_SIZE = (GRID_COLUMNS * CELL_WIDTH, V1_ROWS * CELL_HEIGHT)
 V2_SIZE = (GRID_COLUMNS * CELL_WIDTH, V2_ROWS * CELL_HEIGHT)
 
 _CACHE_DIR_NAME = ".py-shimeji-cache"
-_CACHE_FORMAT_VERSION = 2
+_CACHE_FORMAT_VERSION = 3
 _ATLAS_EDGE_INSET_PX = 2
 _PET_JSON_NAME = "pet.json"
 _SPRITESHEET_NAMES: tuple[str, ...] = (
@@ -33,7 +33,7 @@ STATE_ROW_FRAMES: dict[str, list[tuple[int, int]]] = {
     "walk": [(1, 0), (1, 1)],
     "sit": [(6, 0)],
     "fall": [(4, 0)],
-    "drag": [(5, 0)],
+    "drag": [(4, 0)],
 }
 
 STATE_FRAME_LIMITS: dict[str, int] = {
