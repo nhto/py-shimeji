@@ -18,23 +18,23 @@ CHAT_LANGUAGE_INSTRUCTIONS: dict[str, str] = {
 
 CHAT_GREETINGS: dict[str, str] = {
     "en": (
-        "Hi! I'm Bubu. Ask me anything — I'm happy to chat while I hang out on your desktop."
+        "Hi! I'm {name}. Ask me anything — I'm happy to chat while I hang out on your desktop."
     ),
-    "zh-Hans": "你好！我是 Bubu。随便问我什么吧——我很乐意一边陪你逛桌面一边聊天。",
-    "zh-Hant": "你好！我是 Bubu。隨便問我什麼吧——我很樂意一邊陪你逛桌面一邊聊天。",
+    "zh-Hans": "你好！我是 {name}。随便问我什么吧——我很乐意一边陪你逛桌面一边聊天。",
+    "zh-Hant": "你好！我是 {name}。隨便問我什麼吧——我很樂意一邊陪你逛桌面一邊聊天。",
 }
 
 CHAT_NO_API_KEY_GREETINGS: dict[str, str] = {
     "en": (
-        "Hi! I'm Bubu. I'd love to chat, but no OpenRouter API key is set yet. "
+        "Hi! I'm {name}. I'd love to chat, but no OpenRouter API key is set yet. "
         "Use Preference in the tray menu to add one."
     ),
     "zh-Hans": (
-        "你好！我是 Bubu。我很想聊天，但还没有配置 OpenRouter API 密钥。"
+        "你好！我是 {name}。我很想聊天，但还没有配置 OpenRouter API 密钥。"
         "请在托盘菜单中选择「偏好设置」进行设置。"
     ),
     "zh-Hant": (
-        "你好！我是 Bubu。我很想聊天，但還沒有設定 OpenRouter API 金鑰。"
+        "你好！我是 {name}。我很想聊天，但還沒有設定 OpenRouter API 金鑰。"
         "請在系統匣選單中選擇「偏好設定」進行設定。"
     ),
 }
@@ -64,9 +64,9 @@ CHAT_STATUS_TYPING_LABELS: dict[str, str] = {
 }
 
 CHAT_TYPING_PHRASE_LABELS: dict[str, str] = {
-    "en": "Bubu is thinking",
-    "zh-Hans": "Bubu 正在思考",
-    "zh-Hant": "Bubu 正在思考",
+    "en": "{name} is thinking",
+    "zh-Hans": "{name} 正在思考",
+    "zh-Hant": "{name} 正在思考",
 }
 
 CHAT_TYPING_INTERVAL_MS: int = 380
@@ -79,16 +79,16 @@ TRAY_NO_API_KEY_TITLE_LABELS: dict[str, str] = {
 
 TRAY_NO_API_KEY_MESSAGE_LABELS: dict[str, str] = {
     "en": (
-        "Open Preference in the tray menu to add an OpenRouter API key and chat with Bubu."
+        "Open Preference in the tray menu to add an OpenRouter API key and chat with {name}."
     ),
-    "zh-Hans": "在托盘菜单中打开「偏好设置」以添加 OpenRouter API 密钥并与 Bubu 聊天。",
-    "zh-Hant": "在系統匣選單中開啟「偏好設定」以新增 OpenRouter API 金鑰並與 Bubu 聊天。",
+    "zh-Hans": "在托盘菜单中打开「偏好设置」以添加 OpenRouter API 密钥并与 {name} 聊天。",
+    "zh-Hant": "在系統匣選單中開啟「偏好設定」以新增 OpenRouter API 金鑰並與 {name} 聊天。",
 }
 
 TRAY_API_KEY_SAVED_MESSAGE_LABELS: dict[str, str] = {
-    "en": "OpenRouter API key saved. You can chat with Bubu now.",
-    "zh-Hans": "OpenRouter API 密钥已保存。现在可以与 Bubu 聊天了。",
-    "zh-Hant": "OpenRouter API 金鑰已儲存。現在可以與 Bubu 聊天了。",
+    "en": "OpenRouter API key saved. You can chat with {name} now.",
+    "zh-Hans": "OpenRouter API 密钥已保存。现在可以与 {name} 聊天了。",
+    "zh-Hant": "OpenRouter API 金鑰已儲存。現在可以與 {name} 聊天了。",
 }
 
 TRAY_API_KEY_CLEARED_MESSAGE_LABELS: dict[str, str] = {
@@ -250,9 +250,51 @@ SPRITE_PICKER_IMPORT_FAILED_LABELS: dict[str, str] = {
 }
 
 TRAY_CHAT_LABELS: dict[str, str] = {
-    "en": "Chat with bubu",
-    "zh-Hans": "与 bubu 聊天",
-    "zh-Hant": "與 bubu 聊天",
+    "en": "Chat with {name}",
+    "zh-Hans": "与 {name} 聊天",
+    "zh-Hant": "與 {name} 聊天",
+}
+
+TRAY_CHANGE_PET_NAME_LABELS: dict[str, str] = {
+    "en": "Change pet name...",
+    "zh-Hans": "更改宠物名称...",
+    "zh-Hant": "更改寵物名稱...",
+}
+
+TRAY_PET_NAME_SAVED_MESSAGE_LABELS: dict[str, str] = {
+    "en": "Pet name updated to {name}.",
+    "zh-Hans": "宠物名称已更新为 {name}。",
+    "zh-Hant": "寵物名稱已更新為 {name}。",
+}
+
+PET_NAME_DIALOG_TITLE_LABELS: dict[str, str] = {
+    "en": "Pet name",
+    "zh-Hans": "宠物名称",
+    "zh-Hant": "寵物名稱",
+}
+
+PET_NAME_DIALOG_INTRO_LABELS: dict[str, str] = {
+    "en": "Choose a name for your desktop pet. It appears in chat and the tray menu.",
+    "zh-Hans": "为你的桌面宠物取一个名字。它会显示在聊天和托盘菜单中。",
+    "zh-Hant": "為你的桌面寵物取一個名字。它會顯示在聊天和系統匣選單中。",
+}
+
+PET_NAME_DIALOG_FIELD_LABELS: dict[str, str] = {
+    "en": "Name",
+    "zh-Hans": "名称",
+    "zh-Hant": "名稱",
+}
+
+PET_NAME_DIALOG_SAVE_LABELS: dict[str, str] = {
+    "en": "Save",
+    "zh-Hans": "保存",
+    "zh-Hant": "儲存",
+}
+
+PET_NAME_DIALOG_CANCEL_LABELS: dict[str, str] = {
+    "en": "Cancel",
+    "zh-Hans": "取消",
+    "zh-Hant": "取消",
 }
 
 TRAY_PREFERENCE_LABELS: dict[str, str] = {
@@ -764,16 +806,16 @@ PREFERENCES_OPENROUTER_HEADING_LABELS: dict[str, str] = {
 
 PREFERENCES_OPENROUTER_INTRO_LABELS: dict[str, str] = {
     "en": (
-        "Bubu uses OpenRouter for chat. Your key is stored locally in "
-        "<b>.env</b> and is only sent to OpenRouter when you message Bubu."
+        "{name} uses OpenRouter for chat. Your key is stored locally in "
+        "<b>.env</b> and is only sent to OpenRouter when you message {name}."
     ),
     "zh-Hans": (
-        "Bubu 使用 OpenRouter 进行聊天。你的密钥保存在本地 "
-        "<b>.env</b> 文件中，仅在你向 Bubu 发送消息时才会发送给 OpenRouter。"
+        "{name} 使用 OpenRouter 进行聊天。你的密钥保存在本地 "
+        "<b>.env</b> 文件中，仅在你向 {name} 发送消息时才会发送给 OpenRouter。"
     ),
     "zh-Hant": (
-        "Bubu 使用 OpenRouter 進行聊天。你的金鑰保存在本機 "
-        "<b>.env</b> 檔案中，僅在你向 Bubu 傳送訊息時才會傳送給 OpenRouter。"
+        "{name} 使用 OpenRouter 進行聊天。你的金鑰保存在本機 "
+        "<b>.env</b> 檔案中，僅在你向 {name} 傳送訊息時才會傳送給 OpenRouter。"
     ),
 }
 
@@ -802,9 +844,9 @@ PREFERENCES_LANGUAGE_HEADING_LABELS: dict[str, str] = {
 }
 
 PREFERENCES_LANGUAGE_HINT_LABELS: dict[str, str] = {
-    "en": "Choose the language Bubu uses when replying in chat.",
-    "zh-Hans": "选择 Bubu 在聊天中回复时使用的语言。",
-    "zh-Hant": "選擇 Bubu 在聊天中回覆時使用的語言。",
+    "en": "Choose the language {name} uses when replying in chat.",
+    "zh-Hans": "选择 {name} 在聊天中回复时使用的语言。",
+    "zh-Hant": "選擇 {name} 在聊天中回覆時使用的語言。",
 }
 
 PREFERENCES_CLEAR_KEY_LABELS: dict[str, str] = {
@@ -862,9 +904,15 @@ UI_LANGUAGE_LABELS: dict[str, dict[str, str]] = {
 }
 
 CHAT_INPUT_PLACEHOLDERS: dict[str, str] = {
-    "en": "Say something to Bubu...",
-    "zh-Hans": "跟 Bubu 说点什么...",
-    "zh-Hant": "跟 Bubu 說點什麼...",
+    "en": "Say something to {name}...",
+    "zh-Hans": "跟 {name} 说点什么...",
+    "zh-Hant": "跟 {name} 說點什麼...",
+}
+
+CHAT_WINDOW_TITLE_LABELS: dict[str, str] = {
+    "en": "Chat with {name}",
+    "zh-Hans": "与 {name} 聊天",
+    "zh-Hant": "與 {name} 聊天",
 }
 
 CHAT_SEND_LABELS: dict[str, str] = {

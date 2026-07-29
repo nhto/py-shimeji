@@ -21,6 +21,7 @@ from config import (
     TRAY_BEHAVIOR_LABELS,
     TRAY_BEHAVIOR_SAVED_MESSAGE_LABELS,
     TRAY_CHANGE_SPRITES_LABELS,
+    TRAY_CHANGE_PET_NAME_LABELS,
     TRAY_CHAT_LABELS,
     TRAY_CLICK_THROUGH_LABELS,
     TRAY_CLICK_THROUGH_TOOLTIP_LABELS,
@@ -39,6 +40,7 @@ from config import (
     TRAY_PAUSE_PETS_LABELS,
     TRAY_PAUSE_PETS_TOOLTIP_LABELS,
     TRAY_PREFERENCE_LABELS,
+    TRAY_PET_NAME_SAVED_MESSAGE_LABELS,
     TRAY_PREFERENCES_SAVED_MESSAGE_LABELS,
     TRAY_QUIT_LABELS,
     TRAY_CHECK_UPDATES_LABELS,
@@ -66,6 +68,7 @@ from config import (
     get_saved_pets_paused,
     has_openrouter_api_key,
     localized,
+    localized_with_pet,
     outlook_integration_available,
     outlook_ui_available,
     set_saved_pet_visible,
@@ -73,6 +76,7 @@ from config import (
 )
 from hotkeys import GlobalHotkeyManager
 from outlook_settings_dialog import open_outlook_settings_dialog
+from pet_name_dialog import open_pet_name_dialog
 from pet_window import PetWindow
 from surfaces import SharedSurfaceCoordinator
 from sprite_picker_dialog import open_sprite_picker_dialog
@@ -138,6 +142,7 @@ class SystemTray:
         self._visibility_actions: dict[int, QAction] = {}
         self._change_sprites_actions: dict[int, QAction] = {}
         self._chat_action: QAction | None = None
+        self._change_pet_name_action: QAction | None = None
         self._preferences_action: QAction | None = None
         self._behavior_action: QAction | None = None
         self._outlook_menu: QMenu | None = None
@@ -169,7 +174,7 @@ class SystemTray:
             language = get_chat_language()
             self._tray.showMessage(
                 localized(TRAY_NO_API_KEY_TITLE_LABELS, language),
-                localized(TRAY_NO_API_KEY_MESSAGE_LABELS, language),
+                localized_with_pet(TRAY_NO_API_KEY_MESSAGE_LABELS, language),
                 QSystemTrayIcon.MessageIcon.Information,
                 8_000,
             )
@@ -224,6 +229,10 @@ class SystemTray:
         self._chat_action = QAction("", menu)
         self._chat_action.triggered.connect(self._open_chat)
         menu.addAction(self._chat_action)
+
+        self._change_pet_name_action = QAction("", menu)
+        self._change_pet_name_action.triggered.connect(self._open_pet_name_dialog)
+        menu.addAction(self._change_pet_name_action)
 
         self._preferences_action = QAction("", menu)
         self._preferences_action.triggered.connect(self._open_preferences)
@@ -326,7 +335,14 @@ class SystemTray:
 
         if self._chat_action is not None:
             self._chat_action.setText(
-                self._action_text_with_hotkey(localized(TRAY_CHAT_LABELS, lang), "open_chat")
+                self._action_text_with_hotkey(
+                    localized_with_pet(TRAY_CHAT_LABELS, lang),
+                    "open_chat",
+                )
+            )
+        if self._change_pet_name_action is not None:
+            self._change_pet_name_action.setText(
+                localized(TRAY_CHANGE_PET_NAME_LABELS, lang)
             )
         if self._preferences_action is not None:
             self._preferences_action.setText(localized(TRAY_PREFERENCE_LABELS, lang))
@@ -647,6 +663,25 @@ class SystemTray:
         parent = self._pets[0] if self._pets else None
         ChatWindow.open_chat(parent, pet=pet)
 
+    def _open_pet_name_dialog(self) -> None:
+        parent = self._pets[0] if self._pets else None
+        pet = self._menu_host_pet or (self._pets[0] if self._pets else None)
+        dialog = open_pet_name_dialog(parent, pet=pet)
+        if dialog is None or not dialog.name_changed:
+            return
+
+        language = get_chat_language()
+        self._apply_menu_language(language)
+        ChatWindow.refresh_pet_name()
+        self._tray.showMessage(
+            "py-shimeji",
+            localized(TRAY_PET_NAME_SAVED_MESSAGE_LABELS, language).format(
+                name=dialog.saved_name
+            ),
+            QSystemTrayIcon.MessageIcon.Information,
+            5_000,
+        )
+
     def _open_behavior_settings(self) -> None:
         parent = self._pets[0] if self._pets else None
         pet = self._menu_host_pet or (self._pets[0] if self._pets else None)
@@ -684,7 +719,7 @@ class SystemTray:
         if has_key and not had_key:
             self._tray.showMessage(
                 "py-shimeji",
-                localized(TRAY_API_KEY_SAVED_MESSAGE_LABELS, language),
+                localized_with_pet(TRAY_API_KEY_SAVED_MESSAGE_LABELS, language),
                 QSystemTrayIcon.MessageIcon.Information,
                 5_000,
             )

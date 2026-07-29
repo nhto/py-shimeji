@@ -38,6 +38,7 @@ from config import (
     has_openrouter_api_key,
     language_option_labels,
     localized,
+    localized_with_pet,
     set_chat_language,
     set_openrouter_api_key,
 )
@@ -210,14 +211,16 @@ class PreferencesDialog(QDialog):
         self._openrouter_heading.setText(
             localized(PREFERENCES_OPENROUTER_HEADING_LABELS, language)
         )
-        self._intro.setText(localized(PREFERENCES_OPENROUTER_INTRO_LABELS, language))
+        self._intro.setText(localized_with_pet(PREFERENCES_OPENROUTER_INTRO_LABELS, language))
         self._key_label.setText(localized(PREFERENCES_API_KEY_LABELS, language))
         self._hint.setText(localized(PREFERENCES_KEY_HINT_LABELS, language))
         self._link.setText(localized(PREFERENCES_KEY_LINK_LABELS, language))
         self._language_heading.setText(
             localized(PREFERENCES_LANGUAGE_HEADING_LABELS, language)
         )
-        self._language_hint.setText(localized(PREFERENCES_LANGUAGE_HINT_LABELS, language))
+        self._language_hint.setText(
+            localized_with_pet(PREFERENCES_LANGUAGE_HINT_LABELS, language)
+        )
         self._clear_button.setText(localized(PREFERENCES_CLEAR_KEY_LABELS, language))
         if self._save_button is not None:
             self._save_button.setText(localized(PREFERENCES_SAVE_LABELS, language))

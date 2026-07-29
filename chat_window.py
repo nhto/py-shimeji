@@ -47,6 +47,7 @@ from config import (
     CHAT_TYPING_PHRASE_LABELS,
     CHAT_WINDOW_GAP_PX,
     CHAT_WINDOW_HEIGHT,
+    CHAT_WINDOW_TITLE_LABELS,
     CHAT_WINDOW_WIDTH,
     OPENROUTER_API_URL,
     build_chat_system_prompt,
@@ -54,7 +55,9 @@ from config import (
     get_chat_language,
     get_chat_model,
     get_openrouter_api_key,
+    get_pet_name,
     has_openrouter_api_key,
+    localized_with_pet,
     set_chat_language,
     set_chat_model,
 )
@@ -219,6 +222,7 @@ class ChatWindow(QWidget):
         self._pet = pet
         self._drag_offset = QPoint(0, 0)
         self._language = get_chat_language()
+        self._pet_name = get_pet_name()
         self._history: list[ChatMessage] = [
             ChatMessage("system", build_chat_system_prompt(self._language)),
         ]
@@ -237,9 +241,9 @@ class ChatWindow(QWidget):
         self._build_ui()
         self._update_api_key_state()
         if has_openrouter_api_key():
-            self._append_bubu_message(CHAT_GREETINGS[self._language])
+            self._append_assistant_message(self._greeting_text())
         else:
-            self._append_bubu_message(CHAT_NO_API_KEY_GREETINGS[self._language])
+            self._append_assistant_message(self._no_api_key_greeting_text())
 
     @classmethod
     def open_chat(
@@ -268,6 +272,12 @@ class ChatWindow(QWidget):
         if cls._instance is not None:
             cls._instance._sync_language_from_settings()
             cls._instance._update_api_key_state()
+
+    @classmethod
+    def refresh_pet_name(cls) -> None:
+        """Update the open chat window after the pet name changes."""
+        if cls._instance is not None:
+            cls._instance._sync_pet_name_from_settings()
 
     @classmethod
     def refresh_api_key_state(cls) -> None:
@@ -310,10 +320,13 @@ class ChatWindow(QWidget):
         self.move(x, y)
 
     def _setup_window(self) -> None:
-        self.setWindowTitle("Chat with Bubu")
+        self.setWindowTitle(localized_with_pet(CHAT_WINDOW_TITLE_LABELS, self._language))
         self.setFixedSize(CHAT_WINDOW_WIDTH, CHAT_WINDOW_HEIGHT)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         apply_light_chat_theme(self)
+
+    def _pet_avatar_letter(self) -> str:
+        return self._pet_name[:1].upper() or "?"
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
@@ -332,17 +345,19 @@ class ChatWindow(QWidget):
         header_layout.setContentsMargins(16, 12, 12, 12)
         header_layout.setSpacing(10)
 
-        avatar = QLabel("B")
+        avatar = QLabel(self._pet_avatar_letter())
         avatar.setFixedSize(36, 36)
         avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         avatar.setStyleSheet(
             "background-color: #f97316; color: #ffffff; border-radius: 18px; font-weight: 700;"
         )
+        self._avatar = avatar
 
         title_block = QVBoxLayout()
         title_block.setSpacing(2)
-        title = QLabel("Bubu")
+        title = QLabel(self._pet_name)
         title.setObjectName("chatTitle")
+        self._title_label = title
         subtitle_row = QHBoxLayout()
         subtitle_row.setSpacing(6)
         status = QLabel("●")
@@ -491,7 +506,7 @@ class ChatWindow(QWidget):
             return
         super().mouseMoveEvent(event)
 
-    def _append_bubu_message(self, text: str) -> None:
+    def _append_assistant_message(self, text: str) -> None:
         self._messages.append(ChatMessage("assistant", text))
         self._render_transcript()
 
@@ -564,7 +579,7 @@ class ChatWindow(QWidget):
             bubble_fg = CHAT_USER_BUBBLE_FG
             border = CHAT_USER_BORDER
         else:
-            sender = "Bubu"
+            sender = self._pet_name
             align = "left"
             label_color = CHAT_BUBU_LABEL_COLOR
             bubble_bg = CHAT_BUBU_BUBBLE_BG
@@ -599,14 +614,14 @@ class ChatWindow(QWidget):
                 f"●</span>"
             )
         dots_html = "&nbsp;".join(dots)
-        phrase = self._localized(CHAT_TYPING_PHRASE_LABELS)
+        phrase = localized_with_pet(CHAT_TYPING_PHRASE_LABELS, self._language)
 
         return (
             f'<table width="100%" cellspacing="0" cellpadding="0" '
             f'style="margin-bottom:14px;">'
             f'<tr><td align="left" style="padding:0 4px;">'
             f'<span style="font-size:10px; font-weight:600; color:{CHAT_TYPING_LABEL_COLOR};">'
-            f"Bubu</span><br/>"
+            f"{self._pet_name}</span><br/>"
             f'<table cellspacing="0" cellpadding="0" style="margin-top:4px;">'
             f'<tr><td align="left" style="background-color:{CHAT_TYPING_BUBBLE_BG}; '
             f"{CHAT_TYPING_BUBBLE_BORDER} padding:12px 16px;\">"
@@ -662,6 +677,24 @@ class ChatWindow(QWidget):
         self._sync_system_prompt()
         self._update_input_labels()
 
+    def _greeting_text(self) -> str:
+        return localized_with_pet(CHAT_GREETINGS, self._language)
+
+    def _no_api_key_greeting_text(self) -> str:
+        return localized_with_pet(CHAT_NO_API_KEY_GREETINGS, self._language)
+
+    def _sync_pet_name_from_settings(self) -> None:
+        name = get_pet_name()
+        if name == self._pet_name:
+            return
+        self._pet_name = name
+        self.setWindowTitle(localized_with_pet(CHAT_WINDOW_TITLE_LABELS, self._language))
+        self._title_label.setText(self._pet_name)
+        self._avatar.setText(self._pet_avatar_letter())
+        self._sync_system_prompt()
+        self._update_input_labels()
+        self._render_transcript()
+
     def _sync_language_from_settings(self) -> None:
         language = get_chat_language()
         if language == self._language:
@@ -700,10 +733,7 @@ class ChatWindow(QWidget):
 
         if configured:
             self._input.setPlaceholderText(
-                CHAT_INPUT_PLACEHOLDERS.get(
-                    self._language,
-                    CHAT_INPUT_PLACEHOLDERS["en"],
-                )
+                localized_with_pet(CHAT_INPUT_PLACEHOLDERS, self._language)
             )
         else:
             self._input.setPlaceholderText(
@@ -743,9 +773,9 @@ class ChatWindow(QWidget):
         self._clear_pending_image()
 
         if has_openrouter_api_key():
-            self._append_bubu_message(CHAT_GREETINGS[self._language])
+            self._append_assistant_message(self._greeting_text())
         else:
-            self._append_bubu_message(CHAT_NO_API_KEY_GREETINGS[self._language])
+            self._append_assistant_message(self._no_api_key_greeting_text())
 
         self._update_clear_history_button_state()
         self._input.setFocus()
@@ -785,9 +815,9 @@ class ChatWindow(QWidget):
             data_url = _encode_image_data_url(Path(path))
         except ValueError as exc:
             if str(exc) == "image_too_large":
-                self._append_bubu_message(self._localized(CHAT_IMAGE_TOO_LARGE_LABELS))
+                self._append_assistant_message(self._localized(CHAT_IMAGE_TOO_LARGE_LABELS))
             else:
-                self._append_bubu_message(self._localized(CHAT_IMAGE_UNSUPPORTED_LABELS))
+                self._append_assistant_message(self._localized(CHAT_IMAGE_UNSUPPORTED_LABELS))
             return
 
         self._pending_image_data_url = data_url
@@ -832,7 +862,7 @@ class ChatWindow(QWidget):
 
     def _send_message(self) -> None:
         if not has_openrouter_api_key():
-            self._append_bubu_message(self._localized(CHAT_NO_API_KEY_SEND_LABELS))
+            self._append_assistant_message(self._localized(CHAT_NO_API_KEY_SEND_LABELS))
             return
 
         text = self._input.text().strip()
@@ -877,7 +907,7 @@ class ChatWindow(QWidget):
     def _on_reply(self, reply: str) -> None:
         self._history.append(ChatMessage("assistant", reply))
         self._streaming_reply = ""
-        self._append_bubu_message(reply)
+        self._append_assistant_message(reply)
         if self._pet is not None:
             self._pet.show_speech_bubble(reply)
         self._set_busy(False)
@@ -895,8 +925,8 @@ class ChatWindow(QWidget):
         if self._streaming_reply:
             partial_reply = self._streaming_reply
             self._streaming_reply = ""
-            self._append_bubu_message(partial_reply)
-        self._append_bubu_message(f"{self._error_reply_prefix()} {message}")
+            self._append_assistant_message(partial_reply)
+        self._append_assistant_message(f"{self._error_reply_prefix()} {message}")
         self._set_busy(False)
         self._input.setFocus()
 

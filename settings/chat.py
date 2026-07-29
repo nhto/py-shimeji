@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 
 from i18n.strings import CHAT_DEFAULT_LANGUAGE, CHAT_LANGUAGE_INSTRUCTIONS, CHAT_LANGUAGES
-from settings.core import CHAT_SYSTEM_PROMPT
+from settings.core import CHAT_SYSTEM_PROMPT_TEMPLATE, DEFAULT_PET_NAME
 from settings.paths import ENV_FILE_PATH, PROJECT_ROOT
 
 OPENROUTER_API_URL: str = "https://openrouter.ai/api/v1/chat/completions"
@@ -33,6 +33,7 @@ CHAT_MODEL_SUPPORTS_IMAGES: frozenset[str] = frozenset(
 )
 
 _CHAT_SETTINGS_PATH: Path = PROJECT_ROOT / ".chat_settings.json"
+_PET_NAME_MAX_LEN: int = 24
 
 
 def persist_env_var(name: str, value: str) -> None:
@@ -163,8 +164,33 @@ def set_chat_language(language_id: str) -> None:
     _save_chat_settings(language=language_id)
 
 
+def _normalize_pet_name(name: str) -> str | None:
+    stripped = " ".join(name.split())
+    if not stripped:
+        return None
+    return stripped[:_PET_NAME_MAX_LEN]
+
+
+def get_pet_name() -> str:
+    """Return the persisted pet name, or the default when unset."""
+    name = _load_chat_settings().get("pet_name", "")
+    if isinstance(name, str):
+        normalized = _normalize_pet_name(name)
+        if normalized:
+            return normalized
+    return DEFAULT_PET_NAME
+
+
+def set_pet_name(name: str) -> str:
+    """Persist the user's chosen pet name and return the normalized value."""
+    normalized = _normalize_pet_name(name) or DEFAULT_PET_NAME
+    _save_chat_settings(pet_name=normalized)
+    return normalized
+
+
 def build_chat_system_prompt(language: str | None = None) -> str:
     """Build the system prompt with a language-specific reply instruction."""
     lang = language if language in valid_chat_language_ids() else get_chat_language()
     instruction = CHAT_LANGUAGE_INSTRUCTIONS.get(lang, CHAT_LANGUAGE_INSTRUCTIONS["en"])
-    return f"{CHAT_SYSTEM_PROMPT} {instruction}"
+    prompt = CHAT_SYSTEM_PROMPT_TEMPLATE.format(name=get_pet_name())
+    return f"{prompt} {instruction}"

@@ -6,7 +6,7 @@ This module re-exports the split settings and i18n packages so existing
 
 from __future__ import annotations
 
-from i18n.locale import language_option_labels, localized, sprite_state_label
+from i18n.locale import language_option_labels, localized, localized_with_pet, sprite_state_label
 from i18n.strings import *  # noqa: F403
 from settings.behavior import (
     AMBIENT_BUMP_PHRASES,
@@ -33,10 +33,12 @@ from settings.chat import (
     get_chat_language,
     get_chat_model,
     get_openrouter_api_key,
+    get_pet_name,
     has_openrouter_api_key,
     set_chat_language,
     set_chat_model,
     set_openrouter_api_key,
+    set_pet_name,
 )
 from settings.core import *  # noqa: F403
 from settings.hotkeys import HOTKEY_ACTIONS, get_hotkey_binding, set_hotkey_binding
