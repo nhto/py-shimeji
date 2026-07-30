@@ -60,12 +60,17 @@ from config import (
     TRAY_TOGGLE_ALL_PETS_TOOLTIP_LABELS,
     TRAY_TOOLTIP_OUTLOOK_UNREAD_LABELS,
     TRAY_TOOLTIP_OUTLOOK_UNAVAILABLE_LABELS,
+    TRAY_WEATHER_ENABLED_LABELS,
+    TRAY_WEATHER_MENU_LABELS,
+    TRAY_WEATHER_SETTINGS_LABELS,
+    TRAY_WEATHER_SETTINGS_SAVED_MESSAGE_LABELS,
     get_chat_language,
     get_hotkey_binding,
     get_outlook_enabled,
     get_pet_sprites_dir,
     get_saved_pet_visible,
     get_saved_pets_paused,
+    get_weather_enabled,
     has_openrouter_api_key,
     localized,
     localized_with_pet,
@@ -73,9 +78,11 @@ from config import (
     outlook_ui_available,
     set_saved_pet_visible,
     set_saved_pets_paused,
+    set_weather_enabled,
 )
 from hotkeys import GlobalHotkeyManager
 from outlook_settings_dialog import open_outlook_settings_dialog
+from weather_settings_dialog import open_weather_settings_dialog
 from pet_name_dialog import open_pet_name_dialog
 from pet_window import PetWindow
 from surfaces import SharedSurfaceCoordinator
@@ -88,6 +95,7 @@ if TYPE_CHECKING:
     from display import DisplayChangeWatcher
     from outlook_monitor import OutlookMonitor
     from outlook_status import OutlookStatusManager
+    from weather_monitor import WeatherMonitor
 
 
 def _build_tray_icon() -> QIcon:
@@ -128,6 +136,7 @@ class SystemTray:
         surface_coordinator: SharedSurfaceCoordinator | None = None,
         outlook_status: OutlookStatusManager | None = None,
         outlook_monitor: OutlookMonitor | None = None,
+        weather_monitor: WeatherMonitor | None = None,
     ) -> None:
         self._app = app
         self._pets = pets
@@ -136,6 +145,7 @@ class SystemTray:
         self._surface_coordinator = surface_coordinator
         self._outlook_status = outlook_status
         self._outlook_monitor = outlook_monitor
+        self._weather_monitor = weather_monitor
         self._tray = QSystemTrayIcon(_build_tray_icon(), parent=pets[0] if pets else None)
         self._update_tray_tooltip()
 
@@ -149,6 +159,9 @@ class SystemTray:
         self._outlook_connect_action: QAction | None = None
         self._outlook_disconnect_action: QAction | None = None
         self._outlook_settings_action: QAction | None = None
+        self._weather_menu: QMenu | None = None
+        self._weather_enabled_action: QAction | None = None
+        self._weather_settings_action: QAction | None = None
         self._pause_pets_action: QAction | None = None
         self._click_through_action: QAction | None = None
         self._check_updates_action: QAction | None = None
@@ -251,6 +264,15 @@ class SystemTray:
             self._outlook_disconnect_action.triggered.connect(self._disconnect_outlook)
             self._outlook_settings_action = self._outlook_menu.addAction("")
             self._outlook_settings_action.triggered.connect(self._open_outlook_settings)
+
+        menu.addSeparator()
+        self._weather_menu = menu.addMenu("")
+        self._weather_enabled_action = self._weather_menu.addAction("")
+        self._weather_enabled_action.setCheckable(True)
+        self._weather_enabled_action.setChecked(get_weather_enabled())
+        self._weather_enabled_action.toggled.connect(self._set_weather_enabled)
+        self._weather_settings_action = self._weather_menu.addAction("")
+        self._weather_settings_action.triggered.connect(self._open_weather_settings)
 
         menu.addSeparator()
 
@@ -360,6 +382,16 @@ class SystemTray:
             self._outlook_settings_action.setText(
                 localized(TRAY_OUTLOOK_SETTINGS_LABELS, lang)
             )
+        if self._weather_menu is not None:
+            self._weather_menu.setTitle(localized(TRAY_WEATHER_MENU_LABELS, lang))
+        if self._weather_enabled_action is not None:
+            self._weather_enabled_action.setText(
+                localized(TRAY_WEATHER_ENABLED_LABELS, lang)
+            )
+        if self._weather_settings_action is not None:
+            self._weather_settings_action.setText(
+                localized(TRAY_WEATHER_SETTINGS_LABELS, lang)
+            )
         if self._pause_pets_action is not None:
             self._pause_pets_action.setText(
                 self._action_text_with_hotkey(
@@ -448,6 +480,10 @@ class SystemTray:
                 )
 
         self._refresh_outlook_menu_state()
+        if self._weather_enabled_action is not None:
+            self._weather_enabled_action.blockSignals(True)
+            self._weather_enabled_action.setChecked(get_weather_enabled())
+            self._weather_enabled_action.blockSignals(False)
 
     def _refresh_outlook_menu_state(self) -> None:
         if self._outlook_status is None:
@@ -738,6 +774,34 @@ class SystemTray:
                 5_000,
             )
 
+    def _set_weather_enabled(self, enabled: bool) -> None:
+        set_weather_enabled(enabled)
+        if self._weather_monitor is None:
+            return
+        if enabled:
+            self._weather_monitor.start()
+        else:
+            self._weather_monitor.stop()
+
+    def _open_weather_settings(self) -> None:
+        parent = self._pets[0] if self._pets else None
+        pet = self._menu_host_pet or (self._pets[0] if self._pets else None)
+        accepted = open_weather_settings_dialog(
+            parent,
+            pet=pet,
+            weather_monitor=self._weather_monitor,
+        )
+        if not accepted:
+            return
+        language = get_chat_language()
+        self._refresh_menu_state()
+        self._tray.showMessage(
+            "py-shimeji",
+            localized(TRAY_WEATHER_SETTINGS_SAVED_MESSAGE_LABELS, language),
+            QSystemTrayIcon.MessageIcon.Information,
+            5_000,
+        )
+
     def _connect_outlook(self) -> None:
         if self._outlook_status is None:
             return
@@ -814,6 +878,8 @@ class SystemTray:
 
     def _quit(self) -> None:
         self._hotkeys.shutdown()
+        if self._weather_monitor is not None:
+            self._weather_monitor.shutdown()
         if self._outlook_monitor is not None:
             self._outlook_monitor.shutdown()
         if self._outlook_status is not None:

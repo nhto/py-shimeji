@@ -2,14 +2,21 @@
 
 A lightweight desktop pet (Shimeji-style) built with **Python 3.10+** and **PyQt6**.
 
-The pet lives in a frameless, transparent, always-on-top window. It idles, walks along the screen edge, chases your cursor, falls with gravity when dropped, and can be dragged anywhere with the mouse. Optional AI chat with **Bubu** is powered by [OpenRouter](https://openrouter.ai/).
+The pet lives in a frameless, transparent, always-on-top window. It idles, walks along the screen edge, chases your cursor, falls with gravity when dropped, and can be dragged anywhere with the mouse.
+
+Optional extras:
+
+- **AI chat** with a customizable pet name (default **Bubu**) via [OpenRouter](https://openrouter.ai/)
+- **Hong Kong weather** — hourly conditions and warning alerts from the [Hong Kong Observatory](https://www.hko.gov.hk/) open-data API
+- **Outlook mail/calendar** notifications on Windows (classic COM or Microsoft Graph)
 
 ## Requirements
 
 - Python 3.10 or newer
 - PyQt6
 - An OpenRouter API key (optional — only needed for chat)
-- **Outlook integration (optional, Windows only):** classic Outlook desktop signed in to your account (see [Outlook COM feasibility](#outlook-com-feasibility-windows-only))
+- **Weather alerts (optional):** no API key — uses HKO public data (Hong Kong locations only)
+- **Outlook integration (optional, Windows only):** classic Outlook desktop signed in to your account (see [Outlook integration](#outlook-integration))
 
 ## Setup
 
@@ -29,7 +36,7 @@ pip install -r requirements.txt
 
 ### Chat setup (optional)
 
-You can add your OpenRouter API key from the tray menu (**OpenRouter API key...**) or manually:
+You can add your OpenRouter API key from the tray menu (**Preferences**) or manually:
 
 ```bash
 cp .env.example .env
@@ -41,7 +48,28 @@ Edit `.env`:
 OPENROUTER_API_KEY=sk-or-v1-...
 ```
 
-Keys saved from the tray menu are written to `.env` and take effect immediately — no restart needed.
+Keys saved from **Preferences** are written to `.env` and take effect immediately — no restart needed.
+
+### Weather alerts (Hong Kong)
+
+py-shimeji can show **hourly weather reports** and **warning / special-tip alerts** from the [Hong Kong Observatory](https://www.hko.gov.hk/) open-data API. No API key is required.
+
+| Feature | Behavior |
+|---------|----------|
+| **Hourly report** | Once per hour (at `:00`), the chosen pet shows temperature, humidity, and forecast for your location |
+| **Warnings & tips** | New or cancelled HKO warnings and special weather tips trigger immediate alerts |
+| **Language** | Follows the UI language from **Preferences** (English, Simplified Chinese, or Traditional Chinese) |
+
+Tray → **Weather**:
+
+| Menu item | Description |
+|-----------|-------------|
+| **HKO weather notifications** | Toggle polling on or off |
+| **Weather settings...** | Pick an HKO station (27 Hong Kong locations), warning poll interval (60–3600 s, default 600), which pet shows bubbles, and whether to notify while pets are paused |
+
+When no visible pet can show a bubble (hidden pets, or paused with notifications disabled), alerts fall back to the **system tray balloon** instead.
+
+Weather state (last hourly key, known warnings/tips) is stored in `.app_settings.json` under `weather`. Disable the feature entirely from **Weather settings...** if you do not want network requests to `data.weather.gov.hk`.
 
 ### Outlook integration
 
@@ -173,7 +201,7 @@ Copy-Item -Force .env.example dist\py-shimeji\.env.example
 1. Run the build (above).
 2. Zip the entire `dist\py-shimeji\` folder (~100 MB), or use `.\scripts\build-release.ps1` to create a versioned zip automatically.
 3. Recipients unzip anywhere and run `py-shimeji.exe` — no Python install needed.
-4. Optional: rename `.env.example` to `.env` and add an OpenRouter key, or set the key from the tray menu after first launch.
+4. Optional: rename `.env.example` to `.env` and add an OpenRouter key, or set the key from **Preferences** after first launch.
 
 ### Releases, auto-update, and installer
 
@@ -216,7 +244,7 @@ Without these secrets, CI still builds and uploads unsigned artifacts.
 | Item | Location when running the `.exe` |
 |------|----------------------------------|
 | Default sprites | Bundled inside the app |
-| `.env` (API key) | Next to `py-shimeji.exe` (created when you save a key from the tray) |
+| `.env` (API key) | Next to `py-shimeji.exe` (created when you save a key from **Preferences**) |
 | `.app_settings.json` | Next to `py-shimeji.exe` |
 | `.chat_settings.json` | Next to `py-shimeji.exe` |
 | Custom sprite folders | Any path you pick in the tray (unchanged) |
@@ -237,9 +265,11 @@ py-shimeji/
 │   ├── persistence.py  # .app_settings.json read/write
 │   ├── behavior.py  # Speed, chase, pet count, ambient speech
 │   ├── outlook.py   # Outlook integration settings
-│   ├── chat.py      # OpenRouter API key and chat model/language
+│   ├── weather.py   # HKO weather notification settings
+│   ├── chat.py      # OpenRouter API key, chat model/language, pet name
 │   ├── hotkeys.py   # Global hotkey bindings
-│   └── sprites.py   # Sprite pack discovery
+│   ├── sprites.py   # Sprite pack discovery
+│   └── update.py    # Auto-update check preferences
 ├── i18n/
 │   ├── strings.py   # Localized UI label dictionaries
 │   └── locale.py    # localized(), language pickers
@@ -249,15 +279,19 @@ py-shimeji/
 ├── surfaces.py      # Walkable ledges from desktop windows (Windows)
 ├── display.py       # Monitor / taskbar geometry change handling
 ├── tray.py          # System tray icon and menu
-├── chat_window.py   # Bubu chat panel (OpenRouter)
+├── chat_window.py   # Pet chat panel (OpenRouter)
 ├── speech_bubble.py # On-pet ambient / chat speech bubbles
-├── api_key_dialog.py  # OpenRouter API key settings dialog
+├── bubble_patterns.py  # Speech-bubble background patterns
+├── api_key_dialog.py  # Preferences dialog (OpenRouter + UI language)
+├── pet_name_dialog.py  # Pet display name settings
 ├── behavior_settings_dialog.py  # Speed, chase, pet count, ambient speech
 ├── dialog_theme.py  # Shared styling for dialogs and chat
 ├── sprite_picker_dialog.py  # Visual sprite pack picker
 ├── shimeji_pack.py          # Shimeji actions.xml compatibility layer
 ├── codex_pet.py             # Codex Pet spritesheet compatibility layer
 ├── outlook_models.py        # MailItem / CalendarEvent dataclasses
+├── outlook_text.py          # Outlook notification text formatting
+├── outlook_actions.py       # Outlook tray menu actions
 ├── outlook_com_client.py    # Classic Outlook COM client (Windows)
 ├── outlook_com_constants.py # MAPI folder/property constants
 ├── outlook_graph_auth.py    # MSAL sign-in for Graph API
@@ -269,6 +303,11 @@ py-shimeji/
 ├── outlook_logging.py       # Safe log formatting (subject/sender only)
 ├── outlook_status.py        # Tray connection state + unread polling
 ├── outlook_settings_dialog.py  # Outlook connect status and toggles
+├── weather_client.py        # HKO open-data fetch and parsing
+├── weather_monitor.py       # Hourly reports and warning alerts
+├── weather_poll_worker.py   # Background HKO polling
+├── weather_settings_dialog.py  # Weather location and notification toggles
+├── weather_text.py          # Weather speech-bubble text formatting
 ├── py-shimeji.spec  # PyInstaller build spec
 ├── py-shimeji-updater.spec  # Updater helper for in-app updates
 ├── version.py       # App version and GitHub repo id
@@ -302,7 +341,7 @@ pip install -r requirements-dev.txt
 .venv\Scripts\python -m pytest tests/ -v
 ```
 
-Coverage includes pet state transitions, hotkey parsing, Outlook mail dedup/snooze, and speech-bubble text formatting.
+Coverage includes pet state transitions, hotkey parsing, Outlook mail dedup/snooze, speech-bubble text formatting, and HKO weather parsing/alerts.
 
 ## Sprites (optional)
 
@@ -381,7 +420,7 @@ python scripts/convert_codex_pet.py "C:\Users\you\.codex\pets\codie"
 - **Right-click** — open the tray menu at the pet
 - **Release on floor** — return to walking / idle
 - **Release in mid-air** — FALLING until the nearest ledge or floor
-- **System tray** — show/hide each pet, chat with Bubu, manage preferences and pet behavior, pause pets (reduce motion), toggle click-through, change sprite folders, or quit
+- **System tray** — show/hide each pet, chat, **Preferences** (API key and UI language), **Change pet name...**, **Pet behavior...**, **Weather** (Hong Kong), **Outlook** (Windows), pause pets (reduce motion), toggle click-through, change sprite folders, check for updates, or quit
 
 ### Global hotkeys (Windows)
 
@@ -423,14 +462,25 @@ By default the app spawns **two** desktop pets. You can change the count (1–4)
 
 Cursor chase tuning constants live in `settings/core.py` and `settings/behavior.py` and can be adjusted from **Pet behavior...** in the tray.
 
-## Chat with Bubu
+## Preferences
 
-Open **Chat with bubu** from the system tray (or right-click a pet). Bubu replies via OpenRouter with streaming text, optional image upload (supported models only), and persisted model/language preferences in `.chat_settings.json`.
+Open **Preferences** from the system tray to manage:
+
+- **OpenRouter API key** — required for chat; stored in `.env`
+- **Reply language** — English, Simplified Chinese (`zh-Hans`), or Traditional Chinese (`zh-Hant`); also drives tray/menu labels and HKO weather text
+
+Changes apply immediately to the tray menu and open chat window.
+
+## Chat
+
+Open **Chat with {name}** from the system tray (or right-click a pet). Your pet replies via OpenRouter with streaming text, optional image upload (supported models only), and persisted model/language preferences in `.chat_settings.json`.
+
+Rename the pet from **Change pet name...** in the tray (default **Bubu**). The new name appears in chat, speech bubbles, and tray notifications.
 
 If no API key is configured:
 
 - The tray shows a short setup notification on startup
-- Use **OpenRouter API key...** in the tray menu to add or clear your key
+- Use **Preferences** in the tray menu to add or clear your key
 - The chat window displays offline status and setup instructions
 - The message composer stays disabled until a valid key is saved
 
@@ -451,8 +501,9 @@ py-shimeji runs locally on your machine. Optional features send or store data as
 | Data | Stored locally | Sent over the network |
 |------|----------------|------------------------|
 | OpenRouter API key | Plain text in `.env` next to the executable (or project root in dev) | Sent to [OpenRouter](https://openrouter.ai/) as a Bearer token when you chat |
-| Chat messages and images | In memory for the current session only (not persisted to disk) | Sent to OpenRouter when you message Bubu |
-| Chat model / language | `.chat_settings.json` | Not sent except as part of chat API requests |
+| Chat messages and images | In memory for the current session only (not persisted to disk) | Sent to OpenRouter when you message your pet |
+| Chat model / language / pet name | `.chat_settings.json` | Not sent except as part of chat API requests |
+| HKO weather data | Last hourly key and known warning/tip IDs in `.app_settings.json` | Fetches public JSON from `data.weather.gov.hk` when weather alerts are enabled |
 | MSAL sign-in tokens | `graph_token_cache` in `.app_settings.json` (plain text) | Used to call Microsoft Graph when Outlook (Graph mode) is connected |
 | Outlook mail notifications | Seen-mail IDs and snooze state in `.app_settings.json` | Mail is read via Outlook COM or Graph on your PC; not uploaded elsewhere |
 | On-screen / tray alerts | — | Sender, subject, and up to ~60 characters of body preview shown in speech bubbles or the system tray |

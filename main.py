@@ -13,12 +13,14 @@ from config import (
     get_saved_pet_visible,
     get_saved_pets_paused,
     get_saved_pet_count,
+    get_weather_enabled,
     outlook_ui_available,
 )
 from display import DisplayChangeWatcher
 from pet_window import PetWindow
 from surfaces import SharedSurfaceCoordinator
 from tray import SystemTray
+from weather_monitor import WeatherMonitor
 
 
 def main() -> int:
@@ -70,6 +72,11 @@ def main() -> int:
         parent=pets[0] if pets else None,
     )
 
+    weather_monitor = WeatherMonitor(
+        pets,
+        parent=pets[0] if pets else None,
+    )
+
     outlook_status = None
     outlook_monitor = None
     if outlook_ui_available():
@@ -93,7 +100,9 @@ def main() -> int:
             surface_coordinator=surface_coordinator,
             outlook_status=outlook_status,
             outlook_monitor=outlook_monitor,
+            weather_monitor=weather_monitor,
         )
+        weather_monitor.set_tray_notifier(tray.show_outlook_tray_message)
         if outlook_monitor is not None:
             outlook_monitor.set_tray_notifier(tray.show_outlook_tray_message)
         for pet in pets:
@@ -105,13 +114,17 @@ def main() -> int:
     elif not any(pet.isVisible() for pet in pets):
         return 0
 
-    def _shutdown_outlook() -> None:
+    if get_weather_enabled():
+        weather_monitor.start()
+
+    def _shutdown_services() -> None:
+        weather_monitor.shutdown()
         if outlook_monitor is not None:
             outlook_monitor.shutdown()
         if outlook_status is not None:
             outlook_status.shutdown()
 
-    app.aboutToQuit.connect(_shutdown_outlook)
+    app.aboutToQuit.connect(_shutdown_services)
 
     return app.exec()
 

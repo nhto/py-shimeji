@@ -43,6 +43,7 @@ from settings.chat import (
 from settings.core import *  # noqa: F403
 from settings.hotkeys import HOTKEY_ACTIONS, get_hotkey_binding, set_hotkey_binding
 from settings.outlook import *  # noqa: F403
+from settings.weather import *  # noqa: F403
 from settings.paths import ASSETS_DIR, BUNDLE_ROOT, ENV_FILE_PATH, PROJECT_ROOT, SPRITES_ROOT
 from settings.paths import SPRITE_FILES, SPRITE_OPTIONAL_STATES
 from settings.update import get_skipped_version, get_update_check_enabled, set_skipped_version, set_update_check_enabled

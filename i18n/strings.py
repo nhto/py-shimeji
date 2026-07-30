@@ -953,3 +953,130 @@ CHAT_IMAGE_UNSUPPORTED_LABELS: dict[str, str] = {
 
 CHAT_MAX_IMAGE_BYTES: int = 4 * 1024 * 1024
 
+TRAY_WEATHER_MENU_LABELS: dict[str, str] = {
+    "en": "Weather",
+    "zh-Hans": "天气",
+    "zh-Hant": "天氣",
+}
+
+TRAY_WEATHER_ENABLED_LABELS: dict[str, str] = {
+    "en": "HKO weather notifications",
+    "zh-Hans": "天文台天气通知",
+    "zh-Hant": "天文台天氣通知",
+}
+
+TRAY_WEATHER_SETTINGS_LABELS: dict[str, str] = {
+    "en": "Weather settings...",
+    "zh-Hans": "天气设置...",
+    "zh-Hant": "天氣設定...",
+}
+
+TRAY_WEATHER_SETTINGS_SAVED_MESSAGE_LABELS: dict[str, str] = {
+    "en": "Weather settings saved.",
+    "zh-Hans": "天气设置已保存。",
+    "zh-Hant": "天氣設定已儲存。",
+}
+
+WEATHER_DIALOG_TITLE_LABELS: dict[str, str] = {
+    "en": "Weather settings",
+    "zh-Hans": "天气设置",
+    "zh-Hant": "天氣設定",
+}
+
+WEATHER_DIALOG_INTRO_LABELS: dict[str, str] = {
+    "en": (
+        "Shows current Hong Kong weather on the hour and alerts for new "
+        "HK Observatory warnings or special weather tips."
+    ),
+    "zh-Hans": (
+        "每小时整点显示香港当前天气，并在香港天文台发布新警告或特别天气提示时提醒。"
+    ),
+    "zh-Hant": (
+        "每小時整點顯示香港當前天氣，並在香港天文台發布新警告或特別天氣提示時提醒。"
+    ),
+}
+
+WEATHER_DIALOG_ENABLED_LABELS: dict[str, str] = {
+    "en": "Enable weather notifications",
+    "zh-Hans": "启用天气通知",
+    "zh-Hant": "啟用天氣通知",
+}
+
+WEATHER_DIALOG_ENABLED_HINT_LABELS: dict[str, str] = {
+    "en": "Uses the free Hong Kong Observatory open data API.",
+    "zh-Hans": "使用香港天文台免费开放数据 API。",
+    "zh-Hant": "使用香港天文台免費開放數據 API。",
+}
+
+WEATHER_DIALOG_LOCATION_LABELS: dict[str, str] = {
+    "en": "Observation location",
+    "zh-Hans": "观测地点",
+    "zh-Hant": "觀測地點",
+}
+
+WEATHER_DIALOG_LOCATION_HINT_LABELS: dict[str, str] = {
+    "en": "Temperature and humidity are read for this HKO station.",
+    "zh-Hans": "温度与湿度取自该天文台站点。",
+    "zh-Hant": "溫度與濕度取自該天文台站點。",
+}
+
+WEATHER_DIALOG_WARNING_INTERVAL_LABELS: dict[str, str] = {
+    "en": "Warning check interval",
+    "zh-Hans": "警告检查间隔",
+    "zh-Hant": "警告檢查間隔",
+}
+
+WEATHER_DIALOG_WARNING_INTERVAL_HINT_LABELS: dict[str, str] = {
+    "en": "How often to check for new warnings (default: 600 s / 10 min).",
+    "zh-Hans": "检查新警告的频率（默认 600 秒 / 10 分钟）。",
+    "zh-Hant": "檢查新警告的頻率（預設 600 秒 / 10 分鐘）。",
+}
+
+WEATHER_DIALOG_NOTIFY_PET_LABELS: dict[str, str] = {
+    "en": "Notify pet",
+    "zh-Hans": "通知宠物",
+    "zh-Hant": "通知寵物",
+}
+
+WEATHER_DIALOG_NOTIFY_PET_HINT_LABELS: dict[str, str] = {
+    "en": "Which pet shows weather speech bubbles.",
+    "zh-Hans": "由哪只宠物显示天气气泡。",
+    "zh-Hant": "由哪隻寵物顯示天氣氣泡。",
+}
+
+WEATHER_DIALOG_NOTIFY_PET_FIRST_VISIBLE_LABELS: dict[str, str] = {
+    "en": "First visible pet",
+    "zh-Hans": "第一只可见宠物",
+    "zh-Hant": "第一隻可見寵物",
+}
+
+WEATHER_DIALOG_NOTIFY_PET_NUMBER_LABELS: dict[str, str] = {
+    "en": "Pet {index}",
+    "zh-Hans": "宠物 {index}",
+    "zh-Hant": "寵物 {index}",
+}
+
+WEATHER_DIALOG_NOTIFY_WHEN_PAUSED_LABELS: dict[str, str] = {
+    "en": "Show notifications while pets are paused",
+    "zh-Hans": "宠物暂停时仍显示通知",
+    "zh-Hant": "寵物暫停時仍顯示通知",
+}
+
+WEATHER_DIALOG_NOTIFY_WHEN_PAUSED_HINT_LABELS: dict[str, str] = {
+    "en": "When off, paused pets use the tray balloon instead of bubbles.",
+    "zh-Hans": "关闭时，暂停的宠物改用托盘气泡通知。",
+    "zh-Hant": "關閉時，暫停的寵物改用托盤氣泡通知。",
+}
+
+WEATHER_DIALOG_SAVE_LABELS: dict[str, str] = {
+    "en": "Save",
+    "zh-Hans": "保存",
+    "zh-Hant": "儲存",
+}
+
+WEATHER_DIALOG_CANCEL_LABELS: dict[str, str] = {
+    "en": "Cancel",
+    "zh-Hans": "取消",
+    "zh-Hant": "取消",
+}
+
