@@ -43,6 +43,7 @@ from outlook_poll_worker import (
 from outlook_actions import join_meeting, open_calendar_event, open_mail
 from outlook_text import truncate_notification_line
 from pet_window import PetWindow
+from chat_context import format_outlook_chat_context
 from settings.core import format_speech_bubble_text
 
 TrayNotifier = Callable[[str, str], None]
@@ -117,6 +118,7 @@ class OutlookMonitor(QObject):
         self._pending_poll_mail = False
         self._pending_poll_calendar = False
         self._mail_events: QObject | None = None
+        self._upcoming_events: list[CalendarEvent] = []
 
         self._mail_timer = QTimer(self)
         self._mail_timer.timeout.connect(self._poll_mail)
@@ -166,6 +168,24 @@ class OutlookMonitor(QObject):
     def shutdown(self) -> None:
         """Release resources on application exit."""
         self.stop()
+
+    def chat_context(self) -> str | None:
+        """Return a short live Outlook snapshot for the chat system prompt."""
+        connected = bool(
+            self._outlook_status is not None
+            and getattr(self._outlook_status, "is_connected", False)
+        )
+        unread: int | None = None
+        if self._outlook_status is not None:
+            raw_unread = getattr(self._outlook_status, "unread_count", None)
+            if isinstance(raw_unread, int):
+                unread = raw_unread
+        return format_outlook_chat_context(
+            enabled=get_outlook_enabled(),
+            connected=connected,
+            unread_count=unread if connected else None,
+            upcoming_events=self._upcoming_events,
+        )
 
     def restart_mail_delivery(self) -> None:
         """Restart mail events/polling after settings change."""
@@ -345,6 +365,7 @@ class OutlookMonitor(QObject):
                 self._start_mail_events()
                 self._restart_timers()
         if result.poll_calendar and get_outlook_calendar_enabled():
+            self._upcoming_events = list(result.calendar_events)
             self._process_calendar(result.calendar_events)
 
     def _process_mail(self, messages: list[MailItem]) -> None:

@@ -52,7 +52,7 @@ def test_parse_warnings_and_tips() -> None:
     warnsum = {
         "WRAIN": {
             "name": "Rainstorm Warning Signal",
-            "code": "WRAIN",
+            "code": "WRAINR",
             "actionCode": "ISSUE",
             "issueTime": "2026-07-30T08:00:00+08:00",
             "updateTime": "2026-07-30T08:00:00+08:00",
@@ -70,6 +70,8 @@ def test_parse_warnings_and_tips() -> None:
     tips = parse_special_tips(swt_payload)
     assert len(warnings) == 1
     assert warnings[0].name.startswith("Rainstorm")
+    assert warnings[0].code == "WRAIN"
+    assert warnings[0].subtype == "WRAINR"
     assert len(tips) == 1
     assert "Thunderstorms" in tips[0].desc
 

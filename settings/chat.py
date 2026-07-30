@@ -190,7 +190,13 @@ def set_pet_name(name: str) -> str:
 
 def build_chat_system_prompt(language: str | None = None) -> str:
     """Build the system prompt with a language-specific reply instruction."""
+    from chat_context import build_live_chat_context
+
     lang = language if language in valid_chat_language_ids() else get_chat_language()
     instruction = CHAT_LANGUAGE_INSTRUCTIONS.get(lang, CHAT_LANGUAGE_INSTRUCTIONS["en"])
     prompt = CHAT_SYSTEM_PROMPT_TEMPLATE.format(name=get_pet_name())
-    return f"{prompt} {instruction}"
+    parts = [f"{prompt} {instruction}"]
+    live_context = build_live_chat_context()
+    if live_context:
+        parts.append(live_context)
+    return "\n\n".join(parts)

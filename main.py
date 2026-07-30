@@ -7,6 +7,7 @@ import sys
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon
 
+from chat_context import clear_chat_context_providers, register_chat_context_provider
 from config import (
     get_outlook_enabled,
     get_pet_sprites_dir,
@@ -72,10 +73,12 @@ def main() -> int:
         parent=pets[0] if pets else None,
     )
 
+    clear_chat_context_providers()
     weather_monitor = WeatherMonitor(
         pets,
         parent=pets[0] if pets else None,
     )
+    register_chat_context_provider(weather_monitor.chat_context)
 
     outlook_status = None
     outlook_monitor = None
@@ -89,6 +92,7 @@ def main() -> int:
             outlook_status=outlook_status,
             parent=pets[0] if pets else None,
         )
+        register_chat_context_provider(outlook_monitor.chat_context)
 
     if QSystemTrayIcon.isSystemTrayAvailable():
         app.setQuitOnLastWindowClosed(False)
@@ -123,6 +127,7 @@ def main() -> int:
             outlook_monitor.shutdown()
         if outlook_status is not None:
             outlook_status.shutdown()
+        clear_chat_context_providers()
 
     app.aboutToQuit.connect(_shutdown_services)
 

@@ -57,7 +57,7 @@ py-shimeji can show **hourly weather reports** and **warning / special-tip alert
 | Feature | Behavior |
 |---------|----------|
 | **Hourly report** | Once per hour (at `:00`), the chosen pet shows temperature, humidity, and forecast for your location |
-| **Warnings & tips** | New or cancelled HKO warnings and special weather tips trigger immediate alerts |
+| **Warnings & tips** | New or cancelled HKO warnings and special weather tips trigger immediate alerts with a **View on HKO** bubble action that opens the matching Observatory page |
 | **Language** | Follows the UI language from **Preferences** (English, Simplified Chinese, or Traditional Chinese) |
 
 Tray → **Weather**:
@@ -280,6 +280,7 @@ py-shimeji/
 ├── display.py       # Monitor / taskbar geometry change handling
 ├── tray.py          # System tray icon and menu
 ├── chat_window.py   # Pet chat panel (OpenRouter)
+├── chat_context.py  # Live weather/Outlook context for chat prompts
 ├── speech_bubble.py # On-pet ambient / chat speech bubbles
 ├── bubble_patterns.py  # Speech-bubble background patterns
 ├── api_key_dialog.py  # Preferences dialog (OpenRouter + UI language)
@@ -304,6 +305,7 @@ py-shimeji/
 ├── outlook_status.py        # Tray connection state + unread polling
 ├── outlook_settings_dialog.py  # Outlook connect status and toggles
 ├── weather_client.py        # HKO open-data fetch and parsing
+├── weather_actions.py       # Open HKO warning pages from bubble actions
 ├── weather_monitor.py       # Hourly reports and warning alerts
 ├── weather_poll_worker.py   # Background HKO polling
 ├── weather_settings_dialog.py  # Weather location and notification toggles
@@ -475,6 +477,8 @@ Changes apply immediately to the tray menu and open chat window.
 
 Open **Chat with {name}** from the system tray (or right-click a pet). Your pet replies via OpenRouter with streaming text, optional image upload (supported models only), and persisted model/language preferences in `.chat_settings.json`.
 
+When **HKO weather** or **Outlook** is enabled, each chat request includes a short live context block in the system prompt (current temperature/humidity, active warnings, unread mail count, next meeting) so questions like “What’s the weather?” or “Any mail?” can be answered from that data without you pasting details.
+
 Rename the pet from **Change pet name...** in the tray (default **Bubu**). The new name appears in chat, speech bubbles, and tray notifications.
 
 If no API key is configured:
@@ -502,6 +506,7 @@ py-shimeji runs locally on your machine. Optional features send or store data as
 |------|----------------|------------------------|
 | OpenRouter API key | Plain text in `.env` next to the executable (or project root in dev) | Sent to [OpenRouter](https://openrouter.ai/) as a Bearer token when you chat |
 | Chat messages and images | In memory for the current session only (not persisted to disk) | Sent to OpenRouter when you message your pet |
+| Live weather / Outlook chat context | In memory (latest poll snapshots) | Short summary (temp, warnings, unread count, next meeting title/time) included in the chat system prompt when those features are enabled |
 | Chat model / language / pet name | `.chat_settings.json` | Not sent except as part of chat API requests |
 | HKO weather data | Last hourly key and known warning/tip IDs in `.app_settings.json` | Fetches public JSON from `data.weather.gov.hk` when weather alerts are enabled |
 | MSAL sign-in tokens | `graph_token_cache` in `.app_settings.json` (plain text) | Used to call Microsoft Graph when Outlook (Graph mode) is connected |

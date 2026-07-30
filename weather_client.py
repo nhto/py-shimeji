@@ -35,6 +35,7 @@ class WeatherWarning:
     action_code: str
     issue_time: str
     update_time: str
+    subtype: str = ""
 
 
 @dataclass(frozen=True)
@@ -129,6 +130,12 @@ def parse_warnings(warnsum: dict) -> list[WeatherWarning]:
         action_code = item.get("actionCode")
         issue_time = item.get("issueTime")
         update_time = item.get("updateTime")
+        raw_subtype = item.get("code")
+        subtype = (
+            raw_subtype.strip().upper()
+            if isinstance(raw_subtype, str) and raw_subtype.strip()
+            else ""
+        )
         warnings.append(
             WeatherWarning(
                 code=code.strip(),
@@ -138,6 +145,7 @@ def parse_warnings(warnsum: dict) -> list[WeatherWarning]:
                 else "",
                 issue_time=issue_time.strip() if isinstance(issue_time, str) else "",
                 update_time=update_time.strip() if isinstance(update_time, str) else "",
+                subtype=subtype,
             )
         )
     warnings.sort(key=lambda warning: warning.code)

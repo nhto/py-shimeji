@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import datetime
-from typing import Callable
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
@@ -25,7 +25,10 @@ from config import (
 )
 from pet_window import PetWindow
 from settings.core import format_speech_bubble_text
+from chat_context import format_weather_chat_context
+from weather_actions import open_hko_warning, open_hko_warnings_today
 from weather_client import (
+    CurrentWeather,
     SpecialWeatherTip,
     WeatherPollResult,
     WeatherWarning,
@@ -39,6 +42,8 @@ from weather_text import (
     format_special_tip_notification,
     format_warning_notification,
 )
+
+BubbleActions = list[tuple[str, Callable[[], None]]]
 
 TrayNotifier = Callable[[str, str], None]
 _logger = logging.getLogger(__name__)
@@ -66,6 +71,12 @@ class WeatherMonitor(QObject):
         self._worker: WeatherPollWorker | None = None
         self._pending_include_current = False
         self._pending_include_warnings = False
+        self._pending_notify_hourly = False
+        self._worker_include_warnings = False
+        self._worker_notify_hourly = False
+        self._last_current: CurrentWeather | None = None
+        self._active_warnings: list[WeatherWarning] = []
+        self._active_tips: list[SpecialWeatherTip] = []
 
         self._hour_check_timer = QTimer(self)
         self._hour_check_timer.timeout.connect(self._check_hourly_schedule)
@@ -73,7 +84,6 @@ class WeatherMonitor(QObject):
         self._warning_timer.timeout.connect(self._poll_warnings)
 
         self.weather_report.connect(self._on_weather_report)
-        self.warning_alert.connect(self._on_warning_alert)
 
     def set_tray_notifier(self, notifier: TrayNotifier | None) -> None:
         self._tray_notifier = notifier
@@ -85,7 +95,8 @@ class WeatherMonitor(QObject):
         self._warning_baseline_pending = True
         self._restart_timers()
         self._check_hourly_schedule()
-        self._poll_warnings()
+        # Seed chat context with current conditions + warnings on start.
+        self._queue_poll(include_current=True, include_warnings=True)
 
     def stop(self) -> None:
         self._running = False
@@ -95,6 +106,15 @@ class WeatherMonitor(QObject):
 
     def shutdown(self) -> None:
         self.stop()
+
+    def chat_context(self) -> str | None:
+        """Return a short live weather snapshot for the chat system prompt."""
+        return format_weather_chat_context(
+            enabled=get_weather_enabled(),
+            current=self._last_current,
+            warnings=self._active_warnings,
+            tips=self._active_tips,
+        )
 
     def restart(self) -> None:
         if not self._running:
@@ -115,26 +135,46 @@ class WeatherMonitor(QObject):
         hourly_key = now.strftime("%Y-%m-%dT%H")
         if hourly_key == get_weather_last_hourly_key():
             return
-        self._queue_poll(include_current=True, include_warnings=False)
+        self._queue_poll(
+            include_current=True,
+            include_warnings=False,
+            notify_hourly=True,
+        )
 
     def _poll_warnings(self) -> None:
         if not self._running or not get_weather_enabled():
             return
         self._queue_poll(include_current=False, include_warnings=True)
 
-    def _queue_poll(self, *, include_current: bool, include_warnings: bool) -> None:
+    def _queue_poll(
+        self,
+        *,
+        include_current: bool,
+        include_warnings: bool,
+        notify_hourly: bool = False,
+    ) -> None:
         if self._worker is not None and self._worker.isRunning():
             self._pending_include_current = self._pending_include_current or include_current
             self._pending_include_warnings = (
                 self._pending_include_warnings or include_warnings
             )
+            self._pending_notify_hourly = self._pending_notify_hourly or notify_hourly
             return
         self._start_worker(
             include_current=include_current,
             include_warnings=include_warnings,
+            notify_hourly=notify_hourly,
         )
 
-    def _start_worker(self, *, include_current: bool, include_warnings: bool) -> None:
+    def _start_worker(
+        self,
+        *,
+        include_current: bool,
+        include_warnings: bool,
+        notify_hourly: bool = False,
+    ) -> None:
+        self._worker_include_warnings = include_warnings
+        self._worker_notify_hourly = notify_hourly
         self._worker = WeatherPollWorker(
             place=get_weather_location(),
             lang=hko_lang_from_ui_language(get_chat_language()),
@@ -166,6 +206,7 @@ class WeatherMonitor(QObject):
         self._worker = None
         self._pending_include_current = False
         self._pending_include_warnings = False
+        self._pending_notify_hourly = False
         self._disconnect_worker(worker)
 
         if worker.isRunning():
@@ -188,11 +229,14 @@ class WeatherMonitor(QObject):
         if self._pending_include_current or self._pending_include_warnings:
             include_current = self._pending_include_current
             include_warnings = self._pending_include_warnings
+            notify_hourly = self._pending_notify_hourly
             self._pending_include_current = False
             self._pending_include_warnings = False
+            self._pending_notify_hourly = False
             self._start_worker(
                 include_current=include_current,
                 include_warnings=include_warnings,
+                notify_hourly=notify_hourly,
             )
 
     def _on_poll_failed(self, _message: str) -> None:
@@ -202,12 +246,16 @@ class WeatherMonitor(QObject):
         if not isinstance(result, WeatherPollResult):
             return
         if result.current is not None:
-            hourly_key = datetime.now().strftime("%Y-%m-%dT%H")
-            set_weather_last_hourly_key(hourly_key)
-            text = format_hourly_weather(result.current)
-            _logger.info("Hourly weather: %s", text.replace("\n", " · "))
-            self.weather_report.emit(text)
-        if result.warnings or result.tips:
+            self._last_current = result.current
+            if self._worker_notify_hourly:
+                hourly_key = datetime.now().strftime("%Y-%m-%dT%H")
+                set_weather_last_hourly_key(hourly_key)
+                text = format_hourly_weather(result.current)
+                _logger.info("Hourly weather: %s", text.replace("\n", " · "))
+                self.weather_report.emit(text)
+        if self._worker_include_warnings:
+            self._active_warnings = list(result.warnings)
+            self._active_tips = list(result.tips)
             self._process_warnings(result.warnings, result.tips)
 
     def _process_warnings(
@@ -220,7 +268,8 @@ class WeatherMonitor(QObject):
         known_swt_set = set(known_swt)
         warnings_changed = False
         swt_changed = False
-        alerts: list[str] = []
+        alerts: list[tuple[str, BubbleActions | None]] = []
+        language = get_chat_language()
 
         current_warning_keys = {
             warning_state_key(warning): warning for warning in warnings
@@ -239,10 +288,12 @@ class WeatherMonitor(QObject):
             for key, warning in current_warning_keys.items():
                 if key in known_warnings:
                     continue
-                if warning.action_code.upper() == "CANCEL":
-                    alerts.append(format_warning_notification(warning))
-                else:
-                    alerts.append(format_warning_notification(warning))
+                alerts.append(
+                    (
+                        format_warning_notification(warning),
+                        self._warning_bubble_actions(warning, language=language),
+                    )
+                )
                 known_warnings[key] = key
                 warnings_changed = True
 
@@ -250,7 +301,12 @@ class WeatherMonitor(QObject):
                 fingerprint = tip_fingerprint(tip)
                 if fingerprint in known_swt_set:
                     continue
-                alerts.append(format_special_tip_notification(tip))
+                alerts.append(
+                    (
+                        format_special_tip_notification(tip),
+                        self._special_tip_bubble_actions(language=language),
+                    )
+                )
                 known_swt.append(fingerprint)
                 known_swt_set.add(fingerprint)
                 swt_changed = True
@@ -260,9 +316,10 @@ class WeatherMonitor(QObject):
         if swt_changed:
             set_weather_known_swt(known_swt[-_MAX_KNOWN_SWT:])
 
-        for alert in alerts:
-            _logger.info("Weather alert: %s", alert.replace("\n", " · "))
-            self.warning_alert.emit(alert)
+        for text, bubble_actions in alerts:
+            _logger.info("Weather alert: %s", text.replace("\n", " · "))
+            self.warning_alert.emit(text)
+            self._notify(text, bubble_actions=bubble_actions)
 
     def _pick_notify_pet(self) -> PetWindow | None:
         index = get_weather_notify_pet_index()
@@ -280,21 +337,43 @@ class WeatherMonitor(QObject):
             return False
         return True
 
+    def _warning_bubble_actions(
+        self,
+        warning: WeatherWarning,
+        *,
+        language: str,
+    ) -> BubbleActions:
+        return [
+            (
+                "View on HKO",
+                lambda item=warning, lang=language: open_hko_warning(
+                    item,
+                    language=lang,
+                ),
+            )
+        ]
+
+    def _special_tip_bubble_actions(self, *, language: str) -> BubbleActions:
+        return [
+            (
+                "View on HKO",
+                lambda lang=language: open_hko_warnings_today(language=lang),
+            )
+        ]
+
     def _notify(
         self,
         text: str,
         *,
         tray_title: str = "Weather",
+        bubble_actions: BubbleActions | None = None,
     ) -> None:
         pet = self._pick_notify_pet()
         bubble_text = format_speech_bubble_text(text)
         if bubble_text is not None and self._should_show_bubble(pet) and pet is not None:
-            pet.show_speech_bubble(bubble_text)
+            pet.show_speech_bubble(bubble_text, actions=bubble_actions)
         elif self._tray_notifier is not None:
             self._tray_notifier(tray_title, text)
 
     def _on_weather_report(self, text: str) -> None:
-        self._notify(text)
-
-    def _on_warning_alert(self, text: str) -> None:
         self._notify(text)
