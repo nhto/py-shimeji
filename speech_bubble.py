@@ -9,6 +9,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor, QCursor, QFont, QFontMetrics, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import QWidget
 
+from bubble_patterns import paint_speech_bubble_pattern
 from settings.core import (
     SPEECH_BUBBLE_DURATION_MS,
     SPEECH_BUBBLE_GAP_PX,
@@ -35,6 +36,7 @@ class SpeechBubbleWindow(QWidget):
         )
         self._pet = pet
         self._text = ""
+        self._pattern_index = 0
         self._actions: list[BubbleAction] = []
         self._action_rects: list[tuple[object, Callable[[], None]]] = []
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
@@ -53,6 +55,7 @@ class SpeechBubbleWindow(QWidget):
     ) -> None:
         """Display text above the pet for a few seconds."""
         self._text = text
+        self._pattern_index = sum(ord(char) for char in text)
         self._actions = list(actions or [])
         self._action_rects = []
         self._resize_to_content()
@@ -151,8 +154,15 @@ class SpeechBubbleWindow(QWidget):
         tail.closeSubpath()
 
         bubble = body.united(tail)
+        paint_speech_bubble_pattern(
+            painter,
+            bubble,
+            pattern_index=self._pattern_index,
+            fill_color=QColor("#ffffff"),
+            accent_color=QColor("#f97316"),
+        )
         painter.setPen(QPen(QColor("#cbd5e1"), 1))
-        painter.setBrush(QColor("#ffffff"))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawPath(bubble)
 
         content_font = self._content_font()

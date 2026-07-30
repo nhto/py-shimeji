@@ -61,6 +61,7 @@ from config import (
     set_chat_language,
     set_chat_model,
 )
+from bubble_patterns import wrap_chat_bubble_content
 from dialog_theme import (
     CHAT_BUBU_BORDER,
     CHAT_BUBU_BUBBLE_BG,
@@ -520,17 +521,23 @@ class ChatWindow(QWidget):
 
     def _render_transcript(self) -> None:
         bubbles: list[str] = []
-        for message in self._messages:
+        for index, message in enumerate(self._messages):
             bubbles.append(
                 self._build_bubble(
                     message.text,
                     is_user=message.role == "user",
                     image_data_urls=message.image_data_urls,
+                    pattern_index=index,
                 )
             )
         if self._streaming_reply:
             bubbles.append(
-                self._build_bubble(self._streaming_reply, is_user=False, streaming=True)
+                self._build_bubble(
+                    self._streaming_reply,
+                    is_user=False,
+                    streaming=True,
+                    pattern_index=len(self._messages),
+                )
             )
         elif self._busy:
             bubbles.append(self._build_typing_bubble())
@@ -546,6 +553,7 @@ class ChatWindow(QWidget):
         is_user: bool,
         image_data_urls: list[str] | None = None,
         streaming: bool = False,
+        pattern_index: int = 0,
     ) -> str:
         """Render a message bubble using table layout (Qt rich text lacks flex/inline-block)."""
         escaped = (
@@ -588,6 +596,15 @@ class ChatWindow(QWidget):
             if streaming:
                 border = CHAT_BUBU_STREAMING_BORDER
 
+        bubble_html = wrap_chat_bubble_content(
+            body_html,
+            is_user=is_user,
+            pattern_index=pattern_index,
+            bubble_bg=bubble_bg,
+            bubble_fg=bubble_fg,
+            border=border,
+        )
+
         return (
             f'<table width="100%" cellspacing="0" cellpadding="0" '
             f'style="margin-bottom:14px;">'
@@ -595,9 +612,7 @@ class ChatWindow(QWidget):
             f'<span style="font-size:10px; font-weight:600; color:{label_color};">'
             f'{sender}</span><br/>'
             f'<table cellspacing="0" cellpadding="0" style="margin-top:4px;">'
-            f'<tr><td align="{align}" style="background-color:{bubble_bg}; {border} '
-            f'padding:10px 14px; color:{bubble_fg}; font-size:13px; '
-            f'line-height:1.55;">{body_html}</td></tr></table>'
+            f'<tr><td align="{align}">{bubble_html}</td></tr></table>'
             f'</td></tr></table>'
         )
 
@@ -615,6 +630,18 @@ class ChatWindow(QWidget):
             )
         dots_html = "&nbsp;".join(dots)
         phrase = localized_with_pet(CHAT_TYPING_PHRASE_LABELS, self._language)
+        typing_body = (
+            f'<span style="color:{CHAT_TYPING_TEXT_COLOR}; font-size:12px;">{phrase}</span> '
+            f"{dots_html}"
+        )
+        typing_html = wrap_chat_bubble_content(
+            typing_body,
+            is_user=False,
+            pattern_index=len(self._messages),
+            bubble_bg=CHAT_TYPING_BUBBLE_BG,
+            bubble_fg=CHAT_TYPING_TEXT_COLOR,
+            border=CHAT_TYPING_BUBBLE_BORDER,
+        )
 
         return (
             f'<table width="100%" cellspacing="0" cellpadding="0" '
@@ -623,11 +650,7 @@ class ChatWindow(QWidget):
             f'<span style="font-size:10px; font-weight:600; color:{CHAT_TYPING_LABEL_COLOR};">'
             f"{self._pet_name}</span><br/>"
             f'<table cellspacing="0" cellpadding="0" style="margin-top:4px;">'
-            f'<tr><td align="left" style="background-color:{CHAT_TYPING_BUBBLE_BG}; '
-            f"{CHAT_TYPING_BUBBLE_BORDER} padding:12px 16px;\">"
-            f'<span style="color:{CHAT_TYPING_TEXT_COLOR}; font-size:12px;">{phrase}</span> '
-            f"{dots_html}"
-            f"</td></tr></table>"
+            f'<tr><td align="left">{typing_html}</td></tr></table>'
             f"</td></tr></table>"
         )
 
