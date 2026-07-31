@@ -51,6 +51,8 @@ class CodexManifest:
 
     spritesheet_path: str
     sprite_version: int
+    display_name: str | None = None
+    description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -91,10 +93,33 @@ def parse_pet_manifest(pet_json: Path) -> CodexManifest | None:
         sprite_version = int(version_raw)
     except (TypeError, ValueError):
         sprite_version = 1
+
+    display_name = data.get("displayName")
+    if not isinstance(display_name, str) or not display_name.strip():
+        display_name = None
+    else:
+        display_name = " ".join(display_name.split())
+
+    description = data.get("description")
+    if not isinstance(description, str) or not description.strip():
+        description = None
+    else:
+        description = " ".join(description.split())
+
     return CodexManifest(
         spritesheet_path=spritesheet_path.strip(),
         sprite_version=sprite_version,
+        display_name=display_name,
+        description=description,
     )
+
+
+def load_codex_pet_metadata(sprites_dir: Path) -> CodexManifest | None:
+    """Return Codex manifest metadata when *sprites_dir* is a Codex pack."""
+    pet_json = find_pet_json(sprites_dir)
+    if pet_json is None:
+        return None
+    return parse_pet_manifest(pet_json)
 
 
 def find_spritesheet(pack_dir: Path, manifest: CodexManifest | None = None) -> Path | None:

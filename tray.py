@@ -21,6 +21,7 @@ from config import (
     TRAY_BEHAVIOR_LABELS,
     TRAY_BEHAVIOR_SAVED_MESSAGE_LABELS,
     TRAY_CHANGE_SPRITES_LABELS,
+    TRAY_CHANGE_PET_NAME_FOR_LABELS,
     TRAY_CHANGE_PET_NAME_LABELS,
     TRAY_CHAT_LABELS,
     TRAY_CLICK_THROUGH_LABELS,
@@ -67,6 +68,7 @@ from config import (
     get_chat_language,
     get_hotkey_binding,
     get_outlook_enabled,
+    get_pet_name,
     get_pet_sprites_dir,
     get_saved_pet_visible,
     get_saved_pets_paused,
@@ -356,16 +358,23 @@ class SystemTray:
             )
 
         if self._chat_action is not None:
+            host_index = self._menu_host_pet.pet_index if self._menu_host_pet is not None else 0
             self._chat_action.setText(
                 self._action_text_with_hotkey(
-                    localized_with_pet(TRAY_CHAT_LABELS, lang),
+                    localized_with_pet(TRAY_CHAT_LABELS, lang, pet_index=host_index),
                     "open_chat",
                 )
             )
         if self._change_pet_name_action is not None:
-            self._change_pet_name_action.setText(
-                localized(TRAY_CHANGE_PET_NAME_LABELS, lang)
-            )
+            if self._menu_host_pet is not None:
+                host_name = get_pet_name(self._menu_host_pet.pet_index)
+                self._change_pet_name_action.setText(
+                    localized(TRAY_CHANGE_PET_NAME_FOR_LABELS, lang).format(name=host_name)
+                )
+            else:
+                self._change_pet_name_action.setText(
+                    localized(TRAY_CHANGE_PET_NAME_LABELS, lang)
+                )
         if self._preferences_action is not None:
             self._preferences_action.setText(localized(TRAY_PREFERENCE_LABELS, lang))
         if self._behavior_action is not None:
@@ -703,7 +712,7 @@ class SystemTray:
         parent = self._pets[0] if self._pets else None
         pet = self._menu_host_pet or (self._pets[0] if self._pets else None)
         dialog = open_pet_name_dialog(parent, pet=pet)
-        if dialog is None or not dialog.name_changed:
+        if dialog is None or not dialog.settings_changed:
             return
 
         language = get_chat_language()

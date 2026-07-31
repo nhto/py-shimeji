@@ -125,6 +125,71 @@ def set_saved_pet_visible(pet_index: int, visible: bool) -> None:
     save_app_settings(data)
 
 
+def _update_pet_settings_entry(pet_index: int) -> dict:
+    data = load_app_settings()
+    pets = data.setdefault("pets", {})
+    if not isinstance(pets, dict):
+        pets = {}
+        data["pets"] = pets
+    entry = pets.setdefault(str(pet_index), {})
+    if not isinstance(entry, dict):
+        entry = {}
+        pets[str(pet_index)] = entry
+    return entry
+
+
+def _save_pet_settings_entry(pet_index: int, entry: dict) -> None:
+    data = load_app_settings()
+    pets = data.setdefault("pets", {})
+    if not isinstance(pets, dict):
+        pets = {}
+        data["pets"] = pets
+    pets[str(pet_index)] = entry
+    save_app_settings(data)
+
+
+def get_saved_pet_display_name(pet_index: int) -> str | None:
+    """Return a user-set display name, or None to use defaults."""
+    raw = pet_settings_entry(pet_index).get("display_name")
+    if not isinstance(raw, str):
+        return None
+    stripped = " ".join(raw.split())
+    return stripped or None
+
+
+def set_saved_pet_display_name(pet_index: int, name: str | None) -> None:
+    """Persist a custom display name for a pet (None clears the override)."""
+    entry = _update_pet_settings_entry(pet_index)
+    normalized = " ".join(name.split()) if isinstance(name, str) and name.strip() else None
+    if normalized:
+        entry["display_name"] = normalized
+    else:
+        entry.pop("display_name", None)
+    _save_pet_settings_entry(pet_index, entry)
+
+
+def get_saved_pet_personality(pet_index: int) -> str | None:
+    """Return a user-set personality line, or None to use pack/default."""
+    raw = pet_settings_entry(pet_index).get("personality")
+    if not isinstance(raw, str):
+        return None
+    stripped = " ".join(raw.split())
+    return stripped or None
+
+
+def set_saved_pet_personality(pet_index: int, personality: str | None) -> None:
+    """Persist a custom personality line for a pet (None clears the override)."""
+    entry = _update_pet_settings_entry(pet_index)
+    normalized = (
+        " ".join(personality.split()) if isinstance(personality, str) and personality.strip() else None
+    )
+    if normalized:
+        entry["personality"] = normalized
+    else:
+        entry.pop("personality", None)
+    _save_pet_settings_entry(pet_index, entry)
+
+
 def get_saved_pets_paused() -> bool:
     """Return whether pets should start in reduce-motion pause mode."""
     return bool(load_app_settings().get("pets_paused", False))

@@ -7,8 +7,18 @@ import os
 from pathlib import Path
 
 from i18n.strings import CHAT_DEFAULT_LANGUAGE, CHAT_LANGUAGE_INSTRUCTIONS, CHAT_LANGUAGES
-from settings.core import CHAT_SYSTEM_PROMPT_TEMPLATE, DEFAULT_PET_NAME
+from settings.core import (
+    CHAT_SYSTEM_PROMPT_TEMPLATE,
+    DEFAULT_PERSONALITY_LINE,
+    DEFAULT_PET_NAME,
+)
 from settings.paths import ENV_FILE_PATH, PROJECT_ROOT
+from settings.persistence import (
+    get_saved_pet_display_name,
+    get_saved_pet_personality,
+    set_saved_pet_display_name,
+    set_saved_pet_personality,
+)
 
 OPENROUTER_API_URL: str = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -34,6 +44,7 @@ CHAT_MODEL_SUPPORTS_IMAGES: frozenset[str] = frozenset(
 
 _CHAT_SETTINGS_PATH: Path = PROJECT_ROOT / ".chat_settings.json"
 _PET_NAME_MAX_LEN: int = 24
+_PET_PERSONALITY_MAX_LEN: int = 500
 
 
 def persist_env_var(name: str, value: str) -> None:
@@ -171,30 +182,102 @@ def _normalize_pet_name(name: str) -> str | None:
     return stripped[:_PET_NAME_MAX_LEN]
 
 
-def get_pet_name() -> str:
-    """Return the persisted pet name, or the default when unset."""
+def _normalize_pet_personality(personality: str) -> str | None:
+    stripped = " ".join(personality.split())
+    if not stripped:
+        return None
+    return stripped[:_PET_PERSONALITY_MAX_LEN]
+
+
+def _legacy_global_pet_name() -> str | None:
     name = _load_chat_settings().get("pet_name", "")
     if isinstance(name, str):
-        normalized = _normalize_pet_name(name)
-        if normalized:
-            return normalized
-    return DEFAULT_PET_NAME
+        return _normalize_pet_name(name)
+    return None
 
 
-def set_pet_name(name: str) -> str:
-    """Persist the user's chosen pet name and return the normalized value."""
-    normalized = _normalize_pet_name(name) or DEFAULT_PET_NAME
-    _save_chat_settings(pet_name=normalized)
+def _codex_metadata_for_pet(pet_index: int):
+    from codex_pet import load_codex_pet_metadata
+    from settings.sprites import get_pet_sprites_dir
+
+    return load_codex_pet_metadata(get_pet_sprites_dir(pet_index))
+
+
+def default_pet_name(pet_index: int = 0) -> str:
+    """Return the default display name before any user override."""
+    codex = _codex_metadata_for_pet(pet_index)
+    if codex is not None and codex.display_name:
+        return codex.display_name[:_PET_NAME_MAX_LEN]
+    if pet_index == 0:
+        legacy = _legacy_global_pet_name()
+        if legacy:
+            return legacy
+        return DEFAULT_PET_NAME
+    return f"{DEFAULT_PET_NAME} {pet_index + 1}"
+
+
+def get_pet_name(pet_index: int = 0) -> str:
+    """Return the display name for a pet, using saved or default values."""
+    saved = get_saved_pet_display_name(pet_index)
+    if saved:
+        return saved[:_PET_NAME_MAX_LEN]
+    return default_pet_name(pet_index)
+
+
+def set_pet_name(name: str, pet_index: int = 0) -> str:
+    """Persist a pet's display name and return the effective name."""
+    normalized = _normalize_pet_name(name)
+    set_saved_pet_display_name(pet_index, normalized)
+    effective = normalized or default_pet_name(pet_index)
+    if pet_index == 0:
+        _save_chat_settings(pet_name=effective)
+    return effective
+
+
+def default_pet_personality_line(pet_index: int = 0) -> str:
+    """Return the default personality instruction for a pet's system prompt."""
+    codex = _codex_metadata_for_pet(pet_index)
+    if codex is not None and codex.description:
+        description = codex.description.strip()
+        if description and not description.endswith("."):
+            description += "."
+        return f"{description} "
+    return DEFAULT_PERSONALITY_LINE
+
+
+def get_pet_personality(pet_index: int = 0) -> str | None:
+    """Return a saved custom personality line, or None for pack/default."""
+    return get_saved_pet_personality(pet_index)
+
+
+def set_pet_personality(personality: str, pet_index: int = 0) -> str | None:
+    """Persist a pet's custom personality line (empty clears the override)."""
+    normalized = _normalize_pet_personality(personality)
+    set_saved_pet_personality(pet_index, normalized)
     return normalized
 
 
-def build_chat_system_prompt(language: str | None = None) -> str:
+def pet_personality_line(pet_index: int = 0) -> str:
+    """Return the effective personality line used in the chat system prompt."""
+    custom = get_saved_pet_personality(pet_index)
+    if custom:
+        line = custom.strip()
+        if line and not line.endswith("."):
+            line += "."
+        return f"{line} "
+    return default_pet_personality_line(pet_index)
+
+
+def build_chat_system_prompt(language: str | None = None, pet_index: int = 0) -> str:
     """Build the system prompt with a language-specific reply instruction."""
     from chat_context import build_live_chat_context
 
     lang = language if language in valid_chat_language_ids() else get_chat_language()
     instruction = CHAT_LANGUAGE_INSTRUCTIONS.get(lang, CHAT_LANGUAGE_INSTRUCTIONS["en"])
-    prompt = CHAT_SYSTEM_PROMPT_TEMPLATE.format(name=get_pet_name())
+    prompt = CHAT_SYSTEM_PROMPT_TEMPLATE.format(
+        name=get_pet_name(pet_index),
+        personality_line=pet_personality_line(pet_index),
+    )
     parts = [f"{prompt} {instruction}"]
     live_context = build_live_chat_context()
     if live_context:

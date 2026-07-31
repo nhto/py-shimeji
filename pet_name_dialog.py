@@ -1,4 +1,4 @@
-"""Dialog for changing the desktop pet's display name."""
+"""Dialog for changing a desktop pet's display name and personality."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox,
     QLabel,
     QLineEdit,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -18,19 +19,23 @@ from config import (
     PET_NAME_DIALOG_CANCEL_LABELS,
     PET_NAME_DIALOG_FIELD_LABELS,
     PET_NAME_DIALOG_INTRO_LABELS,
+    PET_NAME_DIALOG_PERSONALITY_HINT_LABELS,
+    PET_NAME_DIALOG_PERSONALITY_LABELS,
     PET_NAME_DIALOG_SAVE_LABELS,
     PET_NAME_DIALOG_TITLE_LABELS,
     get_chat_language,
     get_pet_name,
+    get_pet_personality,
     localized,
     set_pet_name,
+    set_pet_personality,
 )
 from dialog_theme import DIALOG_HINT_STYLE, apply_light_dialog_theme
 from pet_window import PetWindow
 
 
 class PetNameDialog(QDialog):
-    """Let the user choose a custom name for the desktop pet."""
+    """Let the user choose a custom name and personality for one desktop pet."""
 
     def __init__(
         self,
@@ -39,21 +44,40 @@ class PetNameDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self._pet = pet
+        self._pet_index = pet.pet_index if pet is not None else 0
         self._positioned = False
-        self._initial_name = get_pet_name()
+        self._initial_name = get_pet_name(self._pet_index)
+        self._initial_personality = get_pet_personality(self._pet_index) or ""
         self._saved_name = self._initial_name
+        self._saved_personality = self._initial_personality
         self._ui_language = get_chat_language()
         self._setup_window()
         self._build_ui()
         self._apply_language(self._ui_language)
 
     @property
+    def pet_index(self) -> int:
+        return self._pet_index
+
+    @property
     def saved_name(self) -> str:
         return self._saved_name
 
     @property
+    def saved_personality(self) -> str | None:
+        return self._saved_personality or None
+
+    @property
     def name_changed(self) -> bool:
         return self._saved_name != self._initial_name
+
+    @property
+    def personality_changed(self) -> bool:
+        return self._saved_personality != self._initial_personality
+
+    @property
+    def settings_changed(self) -> bool:
+        return self.name_changed or self.personality_changed
 
     def _setup_window(self) -> None:
         self.setModal(True)
@@ -108,14 +132,28 @@ class PetNameDialog(QDialog):
         self._name_input = QLineEdit()
         self._name_input.setText(self._initial_name)
         self._name_input.setClearButtonEnabled(True)
-        self._name_input.returnPressed.connect(self._save_name)
+        self._name_input.returnPressed.connect(self._save_settings)
         layout.addWidget(self._name_input)
+
+        self._personality_label = QLabel()
+        layout.addWidget(self._personality_label)
+
+        self._personality_hint = QLabel()
+        self._personality_hint.setWordWrap(True)
+        self._personality_hint.setStyleSheet(DIALOG_HINT_STYLE)
+        layout.addWidget(self._personality_hint)
+
+        self._personality_input = QTextEdit()
+        self._personality_input.setObjectName("personalityInput")
+        self._personality_input.setPlainText(self._initial_personality)
+        self._personality_input.setFixedHeight(72)
+        layout.addWidget(self._personality_input)
 
         self._button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save
             | QDialogButtonBox.StandardButton.Cancel
         )
-        self._button_box.accepted.connect(self._save_name)
+        self._button_box.accepted.connect(self._save_settings)
         self._button_box.rejected.connect(self.reject)
         self._save_button = self._button_box.button(QDialogButtonBox.StandardButton.Save)
         self._cancel_button = self._button_box.button(QDialogButtonBox.StandardButton.Cancel)
@@ -125,14 +163,25 @@ class PetNameDialog(QDialog):
         self.setWindowTitle(localized(PET_NAME_DIALOG_TITLE_LABELS, language))
         self._intro.setText(localized(PET_NAME_DIALOG_INTRO_LABELS, language))
         self._name_label.setText(localized(PET_NAME_DIALOG_FIELD_LABELS, language))
+        self._personality_label.setText(
+            localized(PET_NAME_DIALOG_PERSONALITY_LABELS, language)
+        )
+        self._personality_hint.setText(
+            localized(PET_NAME_DIALOG_PERSONALITY_HINT_LABELS, language)
+        )
         if self._save_button is not None:
             self._save_button.setText(localized(PET_NAME_DIALOG_SAVE_LABELS, language))
         if self._cancel_button is not None:
             self._cancel_button.setText(localized(PET_NAME_DIALOG_CANCEL_LABELS, language))
 
-    def _save_name(self) -> None:
-        self._saved_name = set_pet_name(self._name_input.text())
+    def _save_settings(self) -> None:
+        self._saved_name = set_pet_name(self._name_input.text(), self._pet_index)
         self._name_input.setText(self._saved_name)
+        self._saved_personality = set_pet_personality(
+            self._personality_input.toPlainText(),
+            self._pet_index,
+        ) or ""
+        self._personality_input.setPlainText(self._saved_personality)
         self.accept()
 
 

@@ -91,6 +91,12 @@ class ChatMessage:
     image_data_urls: list[str] | None = None
 
 
+@dataclass
+class _PetChatState:
+    history: list[ChatMessage]
+    messages: list[ChatMessage]
+
+
 def _serialize_chat_message(message: ChatMessage) -> dict[str, object]:
     if message.image_data_urls:
         content: list[dict[str, object]] = []
@@ -212,6 +218,7 @@ class ChatWindow(QWidget):
     """Speech-bubble chat panel anchored above the desktop pet."""
 
     _instance: ChatWindow | None = None
+    _pet_states: dict[int, _PetChatState] = {}
 
     def __init__(self, parent: QWidget | None = None, pet: PetWindow | None = None) -> None:
         super().__init__(
@@ -221,13 +228,11 @@ class ChatWindow(QWidget):
             | Qt.WindowType.WindowStaysOnTopHint,
         )
         self._pet = pet
+        self._pet_index = pet.pet_index if pet is not None else 0
         self._drag_offset = QPoint(0, 0)
         self._language = get_chat_language()
-        self._pet_name = get_pet_name()
-        self._history: list[ChatMessage] = [
-            ChatMessage("system", build_chat_system_prompt(self._language)),
-        ]
-        self._messages: list[ChatMessage] = []
+        self._pet_name = get_pet_name(self._pet_index)
+        self._load_pet_state(self._pet_index)
         self._worker: ChatWorker | None = None
         self._model = get_chat_model()
         self._streaming_reply = ""
@@ -241,10 +246,7 @@ class ChatWindow(QWidget):
         self._setup_window()
         self._build_ui()
         self._update_api_key_state()
-        if has_openrouter_api_key():
-            self._append_assistant_message(self._greeting_text())
-        else:
-            self._append_assistant_message(self._no_api_key_greeting_text())
+        self._render_transcript()
 
     @classmethod
     def open_chat(
@@ -288,9 +290,56 @@ class ChatWindow(QWidget):
     def _set_pet(self, pet: PetWindow) -> None:
         if self._pet is pet:
             return
+        if self._busy:
+            return
+        self._store_pet_state(self._pet_index)
         if self._pet is not None:
             self._pet.end_chat_hold()
         self._pet = pet
+        self._pet_index = pet.pet_index
+        self._pet_name = get_pet_name(self._pet_index)
+        self._load_pet_state(self._pet_index)
+        self._apply_pet_identity_to_ui()
+        self._render_transcript()
+
+    def _store_pet_state(self, pet_index: int) -> None:
+        ChatWindow._pet_states[pet_index] = _PetChatState(
+            history=list(self._history),
+            messages=list(self._messages),
+        )
+
+    def _load_pet_state(self, pet_index: int) -> None:
+        state = ChatWindow._pet_states.get(pet_index)
+        if state is None:
+            self._history = [
+                ChatMessage("system", build_chat_system_prompt(self._language, pet_index)),
+            ]
+            self._messages = []
+            if has_openrouter_api_key():
+                self._messages.append(
+                    ChatMessage("assistant", self._greeting_text())
+                )
+            else:
+                self._messages.append(
+                    ChatMessage("assistant", self._no_api_key_greeting_text())
+                )
+            return
+
+        self._history = list(state.history)
+        self._messages = list(state.messages)
+        self._sync_system_prompt()
+
+    def _apply_pet_identity_to_ui(self) -> None:
+        self.setWindowTitle(
+            localized_with_pet(
+                CHAT_WINDOW_TITLE_LABELS,
+                self._language,
+                pet_index=self._pet_index,
+            )
+        )
+        self._title_label.setText(self._pet_name)
+        self._avatar.setText(self._pet_avatar_letter())
+        self._update_input_labels()
 
     def _position_above_pet(self, pet: PetWindow | None) -> None:
         """Place the chat panel centered above the shimeji."""
@@ -321,7 +370,13 @@ class ChatWindow(QWidget):
         self.move(x, y)
 
     def _setup_window(self) -> None:
-        self.setWindowTitle(localized_with_pet(CHAT_WINDOW_TITLE_LABELS, self._language))
+        self.setWindowTitle(
+            localized_with_pet(
+                CHAT_WINDOW_TITLE_LABELS,
+                self._language,
+                pet_index=self._pet_index,
+            )
+        )
         self.setFixedSize(CHAT_WINDOW_WIDTH, CHAT_WINDOW_HEIGHT)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         apply_light_chat_theme(self)
@@ -629,7 +684,11 @@ class ChatWindow(QWidget):
                 f"●</span>"
             )
         dots_html = "&nbsp;".join(dots)
-        phrase = localized_with_pet(CHAT_TYPING_PHRASE_LABELS, self._language)
+        phrase = localized_with_pet(
+            CHAT_TYPING_PHRASE_LABELS,
+            self._language,
+            pet_index=self._pet_index,
+        )
         typing_body = (
             f'<span style="color:{CHAT_TYPING_TEXT_COLOR}; font-size:12px;">{phrase}</span> '
             f"{dots_html}"
@@ -701,21 +760,27 @@ class ChatWindow(QWidget):
         self._update_input_labels()
 
     def _greeting_text(self) -> str:
-        return localized_with_pet(CHAT_GREETINGS, self._language)
+        return localized_with_pet(
+            CHAT_GREETINGS,
+            self._language,
+            pet_index=self._pet_index,
+        )
 
     def _no_api_key_greeting_text(self) -> str:
-        return localized_with_pet(CHAT_NO_API_KEY_GREETINGS, self._language)
+        return localized_with_pet(
+            CHAT_NO_API_KEY_GREETINGS,
+            self._language,
+            pet_index=self._pet_index,
+        )
 
     def _sync_pet_name_from_settings(self) -> None:
-        name = get_pet_name()
+        name = get_pet_name(self._pet_index)
         if name == self._pet_name:
+            self._sync_system_prompt()
             return
         self._pet_name = name
-        self.setWindowTitle(localized_with_pet(CHAT_WINDOW_TITLE_LABELS, self._language))
-        self._title_label.setText(self._pet_name)
-        self._avatar.setText(self._pet_avatar_letter())
+        self._apply_pet_identity_to_ui()
         self._sync_system_prompt()
-        self._update_input_labels()
         self._render_transcript()
 
     def _sync_language_from_settings(self) -> None:
@@ -732,7 +797,7 @@ class ChatWindow(QWidget):
         self._update_input_labels()
 
     def _sync_system_prompt(self) -> None:
-        prompt = build_chat_system_prompt(self._language)
+        prompt = build_chat_system_prompt(self._language, self._pet_index)
         if not self._history:
             self._history.append(ChatMessage("system", prompt))
             return
@@ -756,7 +821,11 @@ class ChatWindow(QWidget):
 
         if configured:
             self._input.setPlaceholderText(
-                localized_with_pet(CHAT_INPUT_PLACEHOLDERS, self._language)
+                localized_with_pet(
+                    CHAT_INPUT_PLACEHOLDERS,
+                    self._language,
+                    pet_index=self._pet_index,
+                )
             )
         else:
             self._input.setPlaceholderText(
@@ -789,7 +858,7 @@ class ChatWindow(QWidget):
 
         self._messages.clear()
         self._history = [
-            ChatMessage("system", build_chat_system_prompt(self._language)),
+            ChatMessage("system", build_chat_system_prompt(self._language, self._pet_index)),
         ]
         self._streaming_reply = ""
         self._input.clear()
@@ -961,6 +1030,7 @@ class ChatWindow(QWidget):
         if self._worker is not None and self._worker.isRunning():
             self._worker.requestInterruption()
             self._worker.wait(2000)
+        self._store_pet_state(self._pet_index)
         if self._pet is not None:
             self._pet.end_chat_hold()
             self._pet = None

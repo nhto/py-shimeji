@@ -34,11 +34,13 @@ from settings.chat import (
     get_chat_model,
     get_openrouter_api_key,
     get_pet_name,
+    get_pet_personality,
     has_openrouter_api_key,
     set_chat_language,
     set_chat_model,
     set_openrouter_api_key,
     set_pet_name,
+    set_pet_personality,
 )
 from settings.core import *  # noqa: F403
 from settings.hotkeys import HOTKEY_ACTIONS, get_hotkey_binding, set_hotkey_binding

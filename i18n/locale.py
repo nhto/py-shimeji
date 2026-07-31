@@ -12,11 +12,18 @@ def localized(labels: dict[str, str], language: str | None = None) -> str:
     return labels.get(lang, labels["en"])
 
 
-def localized_with_pet(labels: dict[str, str], language: str | None = None) -> str:
-    """Return a localized string with the current pet name substituted."""
+def localized_with_pet(
+    labels: dict[str, str],
+    language: str | None = None,
+    *,
+    pet_index: int = 0,
+    name: str | None = None,
+) -> str:
+    """Return a localized string with a pet name substituted."""
     from settings.chat import get_pet_name
 
-    return localized(labels, language).format(name=get_pet_name())
+    pet_name = name if name is not None else get_pet_name(pet_index)
+    return localized(labels, language).format(name=pet_name)
 
 
 def language_option_labels(ui_language: str | None = None) -> list[tuple[str, str]]:

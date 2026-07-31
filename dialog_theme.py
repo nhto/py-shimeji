@@ -58,6 +58,18 @@ LIGHT_DIALOG_STYLESHEET = """
     QLineEdit:focus {
         border-color: #6366f1;
     }
+    QTextEdit {
+        background-color: #ffffff;
+        color: #0f172a;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 8px 10px;
+        selection-background-color: #6366f1;
+        selection-color: #ffffff;
+    }
+    QTextEdit:focus {
+        border-color: #6366f1;
+    }
     QComboBox {
         background-color: #ffffff;
         color: #0f172a;

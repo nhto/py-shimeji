@@ -261,6 +261,12 @@ TRAY_CHANGE_PET_NAME_LABELS: dict[str, str] = {
     "zh-Hant": "更改寵物名稱...",
 }
 
+TRAY_CHANGE_PET_NAME_FOR_LABELS: dict[str, str] = {
+    "en": "Change {name}'s name...",
+    "zh-Hans": "更改 {name} 的名称...",
+    "zh-Hant": "更改 {name} 的名稱...",
+}
+
 TRAY_PET_NAME_SAVED_MESSAGE_LABELS: dict[str, str] = {
     "en": "Pet name updated to {name}.",
     "zh-Hans": "宠物名称已更新为 {name}。",
@@ -274,9 +280,21 @@ PET_NAME_DIALOG_TITLE_LABELS: dict[str, str] = {
 }
 
 PET_NAME_DIALOG_INTRO_LABELS: dict[str, str] = {
-    "en": "Choose a name for your desktop pet. It appears in chat and the tray menu.",
-    "zh-Hans": "为你的桌面宠物取一个名字。它会显示在聊天和托盘菜单中。",
-    "zh-Hant": "為你的桌面寵物取一個名字。它會顯示在聊天和系統匣選單中。",
+    "en": "Choose a name and optional personality for this pet. They appear in chat and the tray menu.",
+    "zh-Hans": "为这只宠物设置名称和可选的性格描述。它们会显示在聊天和托盘菜单中。",
+    "zh-Hant": "為這隻寵物設定名稱和可選的性格描述。它們會顯示在聊天和系統匣選單中。",
+}
+
+PET_NAME_DIALOG_PERSONALITY_LABELS: dict[str, str] = {
+    "en": "Personality (optional)",
+    "zh-Hans": "性格（可选）",
+    "zh-Hant": "性格（可選）",
+}
+
+PET_NAME_DIALOG_PERSONALITY_HINT_LABELS: dict[str, str] = {
+    "en": "A short line added to the chat system prompt, e.g. tone, quirks, or backstory.",
+    "zh-Hans": "一行简短描述，会加入聊天系统提示，例如语气、习惯或背景。",
+    "zh-Hant": "一行簡短描述，會加入聊天系統提示，例如語氣、習慣或背景。",
 }
 
 PET_NAME_DIALOG_FIELD_LABELS: dict[str, str] = {
