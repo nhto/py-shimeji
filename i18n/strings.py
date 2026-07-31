@@ -903,6 +903,33 @@ PREFERENCES_STATUS_ENTER_KEY_LABELS: dict[str, str] = {
     "zh-Hant": "狀態：儲存前請輸入金鑰。",
 }
 
+PREFERENCES_CONTEXT_HEADING_LABELS: dict[str, str] = {
+    "en": "Chat context",
+    "zh-Hans": "聊天上下文",
+    "zh-Hant": "聊天上下文",
+}
+
+PREFERENCES_CONTEXT_HINT_LABELS: dict[str, str] = {
+    "en": (
+        "Time, power, and pet state are always included when you chat. "
+        "Enable the options below only if you want the pet to see more."
+    ),
+    "zh-Hans": "聊天时会始终包含时间、电源和宠物状态。仅在需要时启用下方选项。",
+    "zh-Hant": "聊天時會始終包含時間、電源和寵物狀態。僅在需要時啟用下方選項。",
+}
+
+PREFERENCES_CONTEXT_ACTIVE_WINDOW_LABELS: dict[str, str] = {
+    "en": "Include active window title",
+    "zh-Hans": "包含当前活动窗口标题",
+    "zh-Hant": "包含目前使用中視窗標題",
+}
+
+PREFERENCES_CONTEXT_CLIPBOARD_LABELS: dict[str, str] = {
+    "en": "Include clipboard text preview",
+    "zh-Hans": "包含剪贴板文字预览",
+    "zh-Hant": "包含剪貼簿文字預覽",
+}
+
 UI_LANGUAGE_LABELS: dict[str, dict[str, str]] = {
     "en": {
         "en": "English",

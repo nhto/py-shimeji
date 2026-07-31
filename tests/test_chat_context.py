@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from chat_context import (
+    BatteryStatus,
     build_live_chat_context,
     clear_chat_context_providers,
+    format_desktop_chat_context,
     format_outlook_chat_context,
     format_weather_chat_context,
     register_chat_context_provider,
@@ -120,3 +122,37 @@ def test_build_chat_system_prompt_appends_live_context() -> None:
     prompt = build_chat_system_prompt("en")
     assert "Live desktop context" in prompt
     assert "29°C" in prompt
+
+
+def test_format_desktop_chat_context_includes_time_and_app_state() -> None:
+    now = datetime(2026, 7, 31, 14, 30, tzinfo=timezone(timedelta(hours=8)))
+    text = format_desktop_chat_context(
+        now=now,
+        battery=BatteryStatus(on_ac=False, percent=72, charging=False),
+        motion_paused=True,
+        click_through=True,
+    )
+    assert text is not None
+    assert "Desktop:" in text
+    assert "2026-07-31 14:30" in text
+    assert "UTC+8" in text
+    assert "72%" in text
+    assert "pets paused" in text
+    assert "click-through on" in text
+
+
+def test_format_desktop_chat_context_optional_sections() -> None:
+    text = format_desktop_chat_context(
+        active_window_title="Cursor — chat_context.py",
+        clipboard_text="hello world",
+    )
+    assert text is not None
+    assert "Active window: Cursor — chat_context.py" in text
+    assert 'Clipboard: "hello world"' in text
+
+
+def test_format_desktop_chat_context_omits_empty_optional_sections() -> None:
+    text = format_desktop_chat_context()
+    assert text is not None
+    assert "Active window:" not in text
+    assert "Clipboard:" not in text

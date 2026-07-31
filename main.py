@@ -8,6 +8,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon
 
 from chat_context import clear_chat_context_providers, register_chat_context_provider
+from desktop_context import DesktopChatContext
 from config import (
     get_outlook_enabled,
     get_pet_sprites_dir,
@@ -74,6 +75,9 @@ def main() -> int:
     )
 
     clear_chat_context_providers()
+    desktop_context = DesktopChatContext(pets, exclude_hwnds=exclude_hwnds)
+    register_chat_context_provider(desktop_context.chat_context)
+
     weather_monitor = WeatherMonitor(
         pets,
         parent=pets[0] if pets else None,

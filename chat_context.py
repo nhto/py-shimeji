@@ -3,10 +3,20 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from outlook_models import CalendarEvent
 from weather_client import CurrentWeather, SpecialWeatherTip, WeatherWarning
+
+
+@dataclass(frozen=True)
+class BatteryStatus:
+    """Current power/battery snapshot for chat context."""
+
+    on_ac: bool | None
+    percent: int | None
+    charging: bool | None = None
 
 ContextProvider = Callable[[], str | None]
 
@@ -163,5 +173,84 @@ def format_outlook_chat_context(
             lines.append(f"- Next meeting: {title} — {when}")
     else:
         lines.append("- Next meeting: none in the next 24 hours")
+
+    return "\n".join(lines)
+
+
+def _format_timezone_label(current: datetime) -> str:
+    tzinfo = current.tzinfo
+    name = current.tzname() or "local"
+    if tzinfo is None:
+        return name
+    offset = tzinfo.utcoffset(current)
+    if offset is None:
+        return name
+    total_minutes = int(offset.total_seconds() // 60)
+    sign = "+" if total_minutes >= 0 else "-"
+    total_minutes = abs(total_minutes)
+    hours, minutes = divmod(total_minutes, 60)
+    offset_label = (
+        f"UTC{sign}{hours}"
+        if minutes == 0
+        else f"UTC{sign}{hours}:{minutes:02d}"
+    )
+    if name and name not in {"UTC", offset_label}:
+        return f"{name} ({offset_label})"
+    return offset_label
+
+
+def format_desktop_chat_context(
+    *,
+    now: datetime | None = None,
+    battery: BatteryStatus | None = None,
+    motion_paused: bool = False,
+    click_through: bool = False,
+    active_window_title: str | None = None,
+    clipboard_text: str | None = None,
+) -> str | None:
+    """Format local desktop state for the chat system prompt."""
+    current = now or datetime.now().astimezone()
+    tz_label = _format_timezone_label(current)
+
+    lines: list[str] = [
+        "Desktop:",
+        (
+            f"- Local time: {current.strftime('%a %Y-%m-%d %H:%M')} "
+            f"({tz_label})"
+        ),
+    ]
+
+    if battery is not None:
+        parts: list[str] = []
+        if battery.on_ac is True:
+            parts.append("plugged in")
+        elif battery.on_ac is False:
+            parts.append("on battery")
+        if battery.percent is not None:
+            parts.append(f"{battery.percent}%")
+        if battery.charging is True:
+            parts.append("charging")
+        elif battery.charging is False and battery.on_ac is False:
+            parts.append("discharging")
+        if parts:
+            lines.append(f"- Power: {', '.join(parts)}")
+
+    app_bits: list[str] = []
+    if motion_paused:
+        app_bits.append("pets paused")
+    else:
+        app_bits.append("pets active")
+    if click_through:
+        app_bits.append("click-through on")
+    else:
+        app_bits.append("click-through off")
+    lines.append(f"- App: {'; '.join(app_bits)}")
+
+    if active_window_title:
+        lines.append(f"- Active window: {active_window_title}")
+
+    if clipboard_text:
+        preview = clipboard_text.replace('"', "'")
+        lines.append(f'- Clipboard: "{preview}"')
 
     return "\n".join(lines)

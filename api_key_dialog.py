@@ -5,6 +5,7 @@ from __future__ import annotations
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -21,6 +22,10 @@ from config import (
     CHAT_WINDOW_GAP_PX,
     PREFERENCES_API_KEY_LABELS,
     PREFERENCES_CANCEL_LABELS,
+    PREFERENCES_CONTEXT_ACTIVE_WINDOW_LABELS,
+    PREFERENCES_CONTEXT_CLIPBOARD_LABELS,
+    PREFERENCES_CONTEXT_HEADING_LABELS,
+    PREFERENCES_CONTEXT_HINT_LABELS,
     PREFERENCES_CLEAR_KEY_LABELS,
     PREFERENCES_KEY_HINT_LABELS,
     PREFERENCES_KEY_LINK_LABELS,
@@ -34,12 +39,16 @@ from config import (
     PREFERENCES_STATUS_NOT_CONFIGURED_LABELS,
     PREFERENCES_TITLE_LABELS,
     get_chat_language,
+    get_chat_context_include_active_window,
+    get_chat_context_include_clipboard,
     get_openrouter_api_key,
     has_openrouter_api_key,
     language_option_labels,
     localized,
     localized_with_pet,
     set_chat_language,
+    set_chat_context_include_active_window,
+    set_chat_context_include_clipboard,
     set_openrouter_api_key,
 )
 from dialog_theme import DIALOG_HEADING_STYLE, DIALOG_HINT_STYLE, apply_light_dialog_theme
@@ -59,6 +68,8 @@ class PreferencesDialog(QDialog):
         self._positioned = False
         self._cleared = False
         self._initial_language = get_chat_language()
+        self._initial_context_active_window = get_chat_context_include_active_window()
+        self._initial_context_clipboard = get_chat_context_include_clipboard()
         self._ui_language = self._initial_language
         self._setup_window()
         self._build_ui()
@@ -73,6 +84,15 @@ class PreferencesDialog(QDialog):
     def language_changed(self) -> bool:
         language_id = self._language_picker.currentData()
         return isinstance(language_id, str) and language_id != self._initial_language
+
+    @property
+    def context_settings_changed(self) -> bool:
+        return (
+            self._context_active_window_check.isChecked()
+            != self._initial_context_active_window
+            or self._context_clipboard_check.isChecked()
+            != self._initial_context_clipboard
+        )
 
     def _setup_window(self) -> None:
         self.setModal(True)
@@ -167,6 +187,26 @@ class PreferencesDialog(QDialog):
         self._language_picker.currentIndexChanged.connect(self._on_language_picker_changed)
         layout.addWidget(self._language_picker)
 
+        context_separator = QFrame()
+        context_separator.setFrameShape(QFrame.Shape.HLine)
+        context_separator.setFrameShadow(QFrame.Shadow.Sunken)
+        layout.addWidget(context_separator)
+
+        self._context_heading = QLabel()
+        self._context_heading.setStyleSheet(DIALOG_HEADING_STYLE)
+        layout.addWidget(self._context_heading)
+
+        self._context_hint = QLabel()
+        self._context_hint.setWordWrap(True)
+        self._context_hint.setStyleSheet(DIALOG_HINT_STYLE)
+        layout.addWidget(self._context_hint)
+
+        self._context_active_window_check = QCheckBox()
+        layout.addWidget(self._context_active_window_check)
+
+        self._context_clipboard_check = QCheckBox()
+        layout.addWidget(self._context_clipboard_check)
+
         button_row = QHBoxLayout()
         self._clear_button = QPushButton()
         self._clear_button.clicked.connect(self._clear_key)
@@ -205,6 +245,10 @@ class PreferencesDialog(QDialog):
         if index >= 0:
             self._language_picker.setCurrentIndex(index)
         self._language_picker.blockSignals(False)
+        self._context_active_window_check.setChecked(
+            get_chat_context_include_active_window()
+        )
+        self._context_clipboard_check.setChecked(get_chat_context_include_clipboard())
 
     def _apply_language(self, language: str) -> None:
         self.setWindowTitle(localized(PREFERENCES_TITLE_LABELS, language))
@@ -220,6 +264,18 @@ class PreferencesDialog(QDialog):
         )
         self._language_hint.setText(
             localized_with_pet(PREFERENCES_LANGUAGE_HINT_LABELS, language)
+        )
+        self._context_heading.setText(
+            localized(PREFERENCES_CONTEXT_HEADING_LABELS, language)
+        )
+        self._context_hint.setText(
+            localized(PREFERENCES_CONTEXT_HINT_LABELS, language)
+        )
+        self._context_active_window_check.setText(
+            localized(PREFERENCES_CONTEXT_ACTIVE_WINDOW_LABELS, language)
+        )
+        self._context_clipboard_check.setText(
+            localized(PREFERENCES_CONTEXT_CLIPBOARD_LABELS, language)
         )
         self._clear_button.setText(localized(PREFERENCES_CLEAR_KEY_LABELS, language))
         if self._save_button is not None:
@@ -255,8 +311,17 @@ class PreferencesDialog(QDialog):
         if isinstance(language_id, str):
             set_chat_language(language_id)
 
+    def _save_context_settings(self) -> None:
+        set_chat_context_include_active_window(
+            self._context_active_window_check.isChecked()
+        )
+        set_chat_context_include_clipboard(
+            self._context_clipboard_check.isChecked()
+        )
+
     def _save_preferences(self) -> None:
         self._save_language()
+        self._save_context_settings()
 
         new_key = self._key_input.text().strip()
         if new_key:
@@ -265,7 +330,7 @@ class PreferencesDialog(QDialog):
             self.accept()
             return
 
-        if has_openrouter_api_key() or self.language_changed:
+        if has_openrouter_api_key() or self.language_changed or self.context_settings_changed:
             self.accept()
             return
 
@@ -279,6 +344,7 @@ class PreferencesDialog(QDialog):
         self._key_input.clear()
         self._cleared = True
         self._save_language()
+        self._save_context_settings()
         self.accept()
 
 

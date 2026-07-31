@@ -175,6 +175,26 @@ def set_chat_language(language_id: str) -> None:
     _save_chat_settings(language=language_id)
 
 
+def get_chat_context_include_active_window() -> bool:
+    """True when chat may include the foreground window title."""
+    return bool(_load_chat_settings().get("context_active_window", False))
+
+
+def set_chat_context_include_active_window(enabled: bool) -> None:
+    """Persist opt-in for sharing the active window title with chat."""
+    _save_chat_settings(context_active_window=bool(enabled))
+
+
+def get_chat_context_include_clipboard() -> bool:
+    """True when chat may include a short clipboard text preview."""
+    return bool(_load_chat_settings().get("context_clipboard", False))
+
+
+def set_chat_context_include_clipboard(enabled: bool) -> None:
+    """Persist opt-in for sharing clipboard text with chat."""
+    _save_chat_settings(context_clipboard=bool(enabled))
+
+
 def _normalize_pet_name(name: str) -> str | None:
     stripped = " ".join(name.split())
     if not stripped:
