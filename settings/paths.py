@@ -59,9 +59,10 @@ ENV_FILE_PATH: Path = PROJECT_ROOT / ".env"
 SPRITE_FILES: dict[str, list[str]] = {
     "idle": ["idle_1.png", "idle_2.png"],
     "walk": ["walk_1.png", "walk_2.png"],
+    "climb": ["climb_1.png", "climb_2.png"],
     "sit": ["sit_1.png"],
     "fall": ["fall_1.png"],
     "drag": ["drag_1.png"],
 }
 
-SPRITE_OPTIONAL_STATES: frozenset[str] = frozenset({"sit"})
+SPRITE_OPTIONAL_STATES: frozenset[str] = frozenset({"sit", "climb"})

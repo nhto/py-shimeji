@@ -384,10 +384,13 @@ Many [Shimeji-EE](https://github.com/Gohan/shimeji-ee) sprite packs use `conf/ac
 | py-shimeji state | Mapped from Shimeji actions (first match) |
 |------------------|-------------------------------------------|
 | Idle             | `Stand`, `Look`, …                        |
-| Walk / climb     | `Walk`, `Run`, `Dash`, …                  |
+| Walk             | `Walk`, `Run`, `Dash`, …                  |
+| Climb            | `ClimbWall`, `ClimbAlongWall`, …          |
 | Sit              | `Sit`, `Sprawl`, `Sleep`, …               |
 | Fall             | `Falling`, `GrabWall`, …                  |
 | Drag             | `Pinched`, `Resisting`, …                 |
+
+Full animation sequences from `actions.xml` are played back — including every pose in the matched action and per-pose `Duration` timing — not just the first one or two frames. Climbing uses dedicated climb actions instead of reusing walk frames.
 
 To permanently convert a pack to native PNG names (for sharing or editing), use the **Convert to py-shimeji PNGs…** button in the sprite picker, or run:
 

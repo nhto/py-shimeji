@@ -41,7 +41,6 @@ from config import (
     PEER_NUDGE_PX,
     PEER_SIT_ON_BUMP_CHANCE,
     PET_FALLBACK_PALETTES,
-    SPRITE_FILES,
     TOP_PERCH_MARGIN_PX,
     get_ambient_phrase,
     get_ambient_speech_enabled,
@@ -185,23 +184,24 @@ class SpriteCache:
         self._width = width
         self._height = height
         self._cache: dict[str, list[QPixmap | None]] = {}
+        self._frame_durations_ms: dict[str, list[int] | None] = {}
         self._load_all()
 
     def _load_all(self) -> None:
-        from shimeji_pack import resolve_sprite_frame_paths
+        from shimeji_pack import resolve_sprite_animations
 
-        frame_paths = resolve_sprite_frame_paths(self._assets_dir)
-        for group, filenames in SPRITE_FILES.items():
-            paths = frame_paths.get(group, [])
+        animations = resolve_sprite_animations(self._assets_dir)
+        for group, animation in animations.items():
             frames: list[QPixmap | None] = []
-            for index, _name in enumerate(filenames):
-                path = paths[index] if index < len(paths) else None
+            for path in animation.paths:
                 frames.append(
                     _prepare_sprite(path, self._width, self._height)
-                    if path is not None and path.is_file()
+                    if path.is_file()
                     else None
                 )
-            self._cache[group] = frames
+            if any(frame is not None for frame in frames):
+                self._cache[group] = frames
+                self._frame_durations_ms[group] = animation.durations_ms
 
     def reload(
         self,
@@ -218,6 +218,7 @@ class SpriteCache:
         if height is not None:
             self._height = height
         self._cache.clear()
+        self._frame_durations_ms.clear()
         self._load_all()
 
     @property
@@ -229,21 +230,37 @@ class SpriteCache:
             for frame in frames
         )
 
-    def frames_for_state(self, state: PetState) -> list[QPixmap | None]:
+    def _animation_group_for_state(self, state: PetState) -> str:
         mapping = {
             PetState.IDLE: "idle",
             PetState.SIT: "sit",
             PetState.WALKING: "walk",
             PetState.CHASING_CURSOR: "walk",
-            PetState.CLIMBING: "walk",
+            PetState.CLIMBING: "climb",
             PetState.FALLING: "fall",
             PetState.DRAGGED: "drag",
         }
-        key = mapping.get(state, "idle")
-        frames = self._cache.get(key, self._cache["idle"])
+        return mapping.get(state, "idle")
+
+    def frames_for_state(self, state: PetState) -> list[QPixmap | None]:
+        key = self._animation_group_for_state(state)
+        frames = self._cache.get(key)
+        if frames is None and key == "climb":
+            frames = self._cache.get("walk")
+        if frames is None:
+            frames = self._cache.get("idle", [])
         if state == PetState.SIT and not any(frame is not None for frame in frames):
-            return self._cache["idle"]
+            return self._cache.get("idle", [])
         return frames
+
+    def frame_duration_ms(self, state: PetState, frame_index: int) -> int:
+        key = self._animation_group_for_state(state)
+        durations = self._frame_durations_ms.get(key)
+        if durations is None and key == "climb":
+            durations = self._frame_durations_ms.get("walk")
+        if durations is not None and frame_index < len(durations):
+            return durations[frame_index]
+        return ANIMATION_INTERVAL_MS
 
     def has_any_sprites(self, state: PetState) -> bool:
         return any(frame is not None for frame in self.frames_for_state(state))
@@ -287,6 +304,7 @@ class PetWindow(QWidget):
             height=self._pet_height,
         )
         self._frame_index: int = 0
+        self._anim_elapsed_ms: int = 0
         self._drag_offset = QPoint(0, 0)
         self._is_dragging: bool = False
         self._drag_pending: bool = False
@@ -400,6 +418,7 @@ class PetWindow(QWidget):
             height=self._pet_height,
         )
         self._frame_index = 0
+        self._anim_elapsed_ms = 0
         self._invalidate_sprite_display_cache()
         set_saved_pet_sprites_dir(self._pet_index, sprites_dir)
         self._refresh_play_area()
@@ -433,6 +452,7 @@ class PetWindow(QWidget):
         self._sprites.reload(width=self._pet_width, height=self._pet_height)
         set_saved_pet_sprite_scale_percent(self._pet_index, self._sprite_scale_percent)
         self._frame_index = 0
+        self._anim_elapsed_ms = 0
         self._invalidate_sprite_display_cache()
         self._refresh_play_area()
         if self._surface_coordinator is not None:
@@ -937,6 +957,7 @@ class PetWindow(QWidget):
 
     def _on_fsm_state_changed(self, old: PetState, new: PetState) -> None:
         self._frame_index = 0
+        self._anim_elapsed_ms = 0
         self._invalidate_sprite_display_cache()
         if new == PetState.SIT and old != PetState.CHASING_CURSOR:
             self._cursor_sit_active = False
@@ -961,8 +982,14 @@ class PetWindow(QWidget):
         ):
             return
         frames = self._sprites.frames_for_state(self._fsm.state)
-        if frames:
-            self._frame_index = (self._frame_index + 1) % len(frames)
+        if not frames:
+            return
+        duration = self._sprites.frame_duration_ms(self._fsm.state, self._frame_index)
+        self._anim_elapsed_ms += ANIMATION_INTERVAL_MS
+        if self._anim_elapsed_ms < duration:
+            return
+        self._anim_elapsed_ms -= duration
+        self._frame_index = (self._frame_index + 1) % len(frames)
         self.update()
 
     def _on_movement_tick(self) -> None:

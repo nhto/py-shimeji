@@ -172,6 +172,7 @@ SPRITE_PICKER_FILES_HEADING_LABELS: dict[str, str] = {
 SPRITE_STATE_LABELS: dict[str, dict[str, str]] = {
     "idle": {"en": "Idle", "zh-Hans": "待机", "zh-Hant": "待機"},
     "walk": {"en": "Walk", "zh-Hans": "行走", "zh-Hant": "行走"},
+    "climb": {"en": "Climb", "zh-Hans": "攀爬", "zh-Hant": "攀爬"},
     "sit": {"en": "Sit", "zh-Hans": "坐下", "zh-Hant": "坐下"},
     "fall": {"en": "Fall", "zh-Hans": "下落", "zh-Hant": "下落"},
     "drag": {"en": "Drag", "zh-Hans": "拖拽", "zh-Hant": "拖曳"},
