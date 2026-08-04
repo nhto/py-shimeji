@@ -27,6 +27,8 @@ from config import (
     TRAY_CLICK_THROUGH_LABELS,
     TRAY_CLICK_THROUGH_TOOLTIP_LABELS,
     TRAY_HIDE_PET_LABELS,
+    TRAY_LAUNCH_MINIMIZED_LABELS,
+    TRAY_LAUNCH_MINIMIZED_TOOLTIP_LABELS,
     TRAY_NO_API_KEY_MESSAGE_LABELS,
     TRAY_NO_API_KEY_TITLE_LABELS,
     TRAY_OUTLOOK_CONNECT_FAILED_MESSAGE_LABELS,
@@ -58,6 +60,8 @@ from config import (
     TRAY_UPDATE_INSTALL_FAILED_MESSAGE_LABELS,
     TRAY_TOOLTIP_VERSION_LABELS,
     TRAY_SHOW_PET_LABELS,
+    TRAY_START_WITH_WINDOWS_LABELS,
+    TRAY_START_WITH_WINDOWS_TOOLTIP_LABELS,
     TRAY_TOGGLE_ALL_PETS_TOOLTIP_LABELS,
     TRAY_TOOLTIP_OUTLOOK_UNREAD_LABELS,
     TRAY_TOOLTIP_OUTLOOK_UNAVAILABLE_LABELS,
@@ -67,20 +71,25 @@ from config import (
     TRAY_WEATHER_SETTINGS_SAVED_MESSAGE_LABELS,
     get_chat_language,
     get_hotkey_binding,
+    get_launch_minimized,
     get_outlook_enabled,
     get_pet_name,
     get_pet_sprites_dir,
     get_saved_pet_visible,
     get_saved_pets_paused,
+    get_start_with_windows,
     get_weather_enabled,
     has_openrouter_api_key,
     localized,
     localized_with_pet,
     outlook_integration_available,
     outlook_ui_available,
+    set_launch_minimized,
     set_saved_pet_visible,
     set_saved_pets_paused,
+    set_start_with_windows,
     set_weather_enabled,
+    startup_ui_available,
 )
 from hotkeys import GlobalHotkeyManager
 from outlook_settings_dialog import open_outlook_settings_dialog
@@ -166,6 +175,8 @@ class SystemTray:
         self._weather_settings_action: QAction | None = None
         self._pause_pets_action: QAction | None = None
         self._click_through_action: QAction | None = None
+        self._start_with_windows_action: QAction | None = None
+        self._launch_minimized_action: QAction | None = None
         self._check_updates_action: QAction | None = None
         self._install_update_action: QAction | None = None
         self._skip_update_action: QAction | None = None
@@ -289,6 +300,20 @@ class SystemTray:
         self._click_through_action.setChecked(False)
         self._click_through_action.toggled.connect(self._set_click_through)
         menu.addAction(self._click_through_action)
+
+        if startup_ui_available():
+            menu.addSeparator()
+            self._start_with_windows_action = QAction("", menu)
+            self._start_with_windows_action.setCheckable(True)
+            self._start_with_windows_action.setChecked(get_start_with_windows())
+            self._start_with_windows_action.toggled.connect(self._set_start_with_windows)
+            menu.addAction(self._start_with_windows_action)
+
+            self._launch_minimized_action = QAction("", menu)
+            self._launch_minimized_action.setCheckable(True)
+            self._launch_minimized_action.setChecked(get_launch_minimized())
+            self._launch_minimized_action.toggled.connect(self._set_launch_minimized)
+            menu.addAction(self._launch_minimized_action)
 
         menu.addSeparator()
 
@@ -419,6 +444,20 @@ class SystemTray:
             self._click_through_action.setToolTip(
                 localized(TRAY_CLICK_THROUGH_TOOLTIP_LABELS, lang)
             )
+        if self._start_with_windows_action is not None:
+            self._start_with_windows_action.setText(
+                localized(TRAY_START_WITH_WINDOWS_LABELS, lang)
+            )
+            self._start_with_windows_action.setToolTip(
+                localized(TRAY_START_WITH_WINDOWS_TOOLTIP_LABELS, lang)
+            )
+        if self._launch_minimized_action is not None:
+            self._launch_minimized_action.setText(
+                localized(TRAY_LAUNCH_MINIMIZED_LABELS, lang)
+            )
+            self._launch_minimized_action.setToolTip(
+                localized(TRAY_LAUNCH_MINIMIZED_TOOLTIP_LABELS, lang)
+            )
         if self._quit_action is not None:
             self._quit_action.setText(localized(TRAY_QUIT_LABELS, lang))
         self.refresh_update_menu_state(language=lang)
@@ -493,6 +532,14 @@ class SystemTray:
             self._weather_enabled_action.blockSignals(True)
             self._weather_enabled_action.setChecked(get_weather_enabled())
             self._weather_enabled_action.blockSignals(False)
+        if self._start_with_windows_action is not None:
+            self._start_with_windows_action.blockSignals(True)
+            self._start_with_windows_action.setChecked(get_start_with_windows())
+            self._start_with_windows_action.blockSignals(False)
+        if self._launch_minimized_action is not None:
+            self._launch_minimized_action.blockSignals(True)
+            self._launch_minimized_action.setChecked(get_launch_minimized())
+            self._launch_minimized_action.blockSignals(False)
 
     def _refresh_outlook_menu_state(self) -> None:
         if self._outlook_status is None:
@@ -791,6 +838,12 @@ class SystemTray:
             self._weather_monitor.start()
         else:
             self._weather_monitor.stop()
+
+    def _set_start_with_windows(self, enabled: bool) -> None:
+        set_start_with_windows(enabled)
+
+    def _set_launch_minimized(self, enabled: bool) -> None:
+        set_launch_minimized(enabled)
 
     def _open_weather_settings(self) -> None:
         parent = self._pets[0] if self._pets else None

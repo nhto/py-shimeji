@@ -52,6 +52,15 @@ from settings.outlook import *  # noqa: F403
 from settings.weather import *  # noqa: F403
 from settings.paths import ASSETS_DIR, BUNDLE_ROOT, ENV_FILE_PATH, PROJECT_ROOT, SPRITES_ROOT
 from settings.paths import SPRITE_FILES, SPRITE_OPTIONAL_STATES
+from settings.startup import (
+    ensure_startup_registry_matches_setting,
+    get_launch_minimized,
+    get_start_with_windows,
+    set_launch_minimized,
+    set_start_with_windows,
+    should_launch_minimized,
+    startup_ui_available,
+)
 from settings.update import get_skipped_version, get_update_check_enabled, set_skipped_version, set_update_check_enabled
 from settings.persistence import (
     get_saved_pet_visible,

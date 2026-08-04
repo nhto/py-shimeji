@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import QApplication, QSystemTrayIcon
 from chat_context import clear_chat_context_providers, register_chat_context_provider
 from desktop_context import DesktopChatContext
 from config import (
+    ensure_startup_registry_matches_setting,
     get_outlook_enabled,
     get_pet_sprites_dir,
     get_saved_pet_visible,
@@ -17,6 +18,7 @@ from config import (
     get_saved_pet_count,
     get_weather_enabled,
     outlook_ui_available,
+    should_launch_minimized,
 )
 from display import DisplayChangeWatcher
 from pet_window import PetWindow
@@ -61,11 +63,14 @@ def main() -> int:
         for pet in pets:
             pet.set_motion_paused(True)
 
+    ensure_startup_registry_matches_setting()
+    launch_minimized = should_launch_minimized()
+
     for index, pet in enumerate(pets):
         visible = get_saved_pet_visible(index)
         if visible is None:
             visible = pet.has_sprites
-        if visible:
+        if not launch_minimized and visible:
             pet.show()
 
     display_watcher = DisplayChangeWatcher(

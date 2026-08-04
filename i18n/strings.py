@@ -432,6 +432,30 @@ TRAY_PAUSE_PETS_TOOLTIP_LABELS: dict[str, str] = {
     "zh-Hant": "寵物保持靜止，適合開會或無障礙使用。關閉穿透點擊後可拖動牠們。",
 }
 
+TRAY_START_WITH_WINDOWS_LABELS: dict[str, str] = {
+    "en": "Start with Windows",
+    "zh-Hans": "开机时启动",
+    "zh-Hant": "開機時啟動",
+}
+
+TRAY_START_WITH_WINDOWS_TOOLTIP_LABELS: dict[str, str] = {
+    "en": "Add py-shimeji to your Windows logon startup programs.",
+    "zh-Hans": "将 py-shimeji 添加到 Windows 登录启动项。",
+    "zh-Hant": "將 py-shimeji 加入 Windows 登入啟動項目。",
+}
+
+TRAY_LAUNCH_MINIMIZED_LABELS: dict[str, str] = {
+    "en": "Launch minimized to tray",
+    "zh-Hans": "启动时最小化到托盘",
+    "zh-Hant": "啟動時最小化到系統匣",
+}
+
+TRAY_LAUNCH_MINIMIZED_TOOLTIP_LABELS: dict[str, str] = {
+    "en": "Start with pets hidden. Show them from the tray menu when ready.",
+    "zh-Hans": "启动时隐藏宠物。准备好后可通过托盘菜单显示。",
+    "zh-Hant": "啟動時隱藏寵物。準備好後可從系統匣選單顯示。",
+}
+
 TRAY_QUIT_LABELS: dict[str, str] = {
     "en": "Quit",
     "zh-Hans": "退出",
