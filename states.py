@@ -51,6 +51,7 @@ class PetStateMachine(QObject):
         self._direction: int = 1  # 1 = right, -1 = left
         self._on_state_changed = on_state_changed
         self._paused: bool = False
+        self._sit_until_click: bool = False
         self._next_idle_walk_ms: int = self._random_idle_duration()
         self._next_sit_ms: int = self._random_idle_to_sit_duration()
 
@@ -71,6 +72,11 @@ class PetStateMachine(QObject):
     def direction(self) -> int:
         """Horizontal facing: 1 (right) or -1 (left)."""
         return self._direction
+
+    @property
+    def sit_until_click(self) -> bool:
+        """True when sitting until the user clicks to wake."""
+        return self._sit_until_click
 
     def flip_direction(self) -> None:
         self._direction *= -1
@@ -100,15 +106,25 @@ class PetStateMachine(QObject):
         self._next_idle_walk_ms = self._random_walk_duration()
         self._transition(PetState.WALKING)
 
-    def begin_sit(self) -> None:
-        """Sit in place until the sit timer expires (e.g. user right-click)."""
+    def begin_sit(self, *, until_click: bool = False) -> None:
+        """Sit in place until the sit timer expires or the user clicks."""
+        self._sit_until_click = until_click
         self._next_idle_walk_ms = self._random_sit_duration()
         self._transition(PetState.SIT)
 
     def begin_sit_for(self, duration_ms: int) -> None:
         """Sit for a fixed duration (e.g. double-click poke)."""
+        self._sit_until_click = False
         self._next_idle_walk_ms = max(BEHAVIOR_INTERVAL_MS, duration_ms)
         self._transition(PetState.SIT)
+
+    def wake_from_sit(self) -> None:
+        """Leave a click-to-wake sit and return to idle."""
+        if self._state != PetState.SIT or not self._sit_until_click:
+            return
+        self._sit_until_click = False
+        self._transition(PetState.IDLE)
+        self._reset_idle_timers()
 
     def begin_cursor_chase(self) -> None:
         """Walk toward the mouse cursor on the current ledge."""
@@ -143,8 +159,7 @@ class PetStateMachine(QObject):
             self._next_sit_ms -= BEHAVIOR_INTERVAL_MS
 
             if self._next_sit_ms <= 0:
-                self._transition(PetState.SIT)
-                self._next_idle_walk_ms = self._random_sit_duration()
+                self.begin_sit(until_click=True)
                 return
 
             if self._next_idle_walk_ms <= 0:
@@ -154,6 +169,8 @@ class PetStateMachine(QObject):
             return
 
         if self._state == PetState.SIT:
+            if self._sit_until_click:
+                return
             self._next_idle_walk_ms -= BEHAVIOR_INTERVAL_MS
             if self._next_idle_walk_ms <= 0:
                 self._transition(PetState.WALKING)

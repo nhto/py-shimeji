@@ -325,6 +325,7 @@ class PetWindow(QWidget):
         self._peer_pets: list[PetWindow] = []
         self._menu_hold: bool = False
         self._chat_hold: bool = False
+        self._system_sleep_hold: bool = False
         self._cursor_sit_active: bool = False
         self._cursor_still_ms: int = 0
         self._last_cursor_pos: QPoint | None = None
@@ -363,6 +364,10 @@ class PetWindow(QWidget):
     @property
     def motion_paused(self) -> bool:
         return self._motion_paused
+
+    @property
+    def system_sleep_hold(self) -> bool:
+        return self._system_sleep_hold
 
     def set_context_menu_handler(
         self, handler: Callable[[QPoint, PetWindow], None] | None
@@ -620,6 +625,47 @@ class PetWindow(QWidget):
         self._anim_timer.start()
         self._move_timer.start()
         self.update()
+
+    def enter_system_sleep_hold(self) -> None:
+        """Show the pet asleep after the PC wakes until the user clicks it."""
+        self._system_sleep_hold = True
+        self._cursor_sit_active = False
+        self._cursor_still_ms = 0
+        self._cursor_chase_ms_left = 0
+        self._cancel_poke_animation()
+        self._fsm.pause()
+        self._fsm.begin_sit(until_click=True)
+        self._fall_timer.stop()
+        self._move_timer.stop()
+        self._frame_index = 0
+        self._anim_timer.start()
+        self.update()
+
+    def wake_from_system_sleep(self) -> bool:
+        """Resume normal behavior after the PC wake sleep hold."""
+        if not self._system_sleep_hold:
+            return False
+        self._system_sleep_hold = False
+        if self._motion_paused or self._menu_hold or self._chat_hold:
+            return True
+        self._fsm.resume()
+        self._anim_timer.start()
+        self._move_timer.start()
+        self.update()
+        return True
+
+    def wake_from_sleep(self) -> bool:
+        """Wake from PC sleep hold or a click-to-wake sit/sleep pose."""
+        if self.wake_from_system_sleep():
+            return True
+        if self._fsm.state == PetState.SIT and self._fsm.sit_until_click:
+            self._fsm.wake_from_sit()
+            if not self._motion_paused and not self._menu_hold and not self._chat_hold:
+                self._anim_timer.start()
+                self._move_timer.start()
+            self.update()
+            return True
+        return False
 
     def _enter_motion_pause(self) -> None:
         """Stop movement and sit still; dragging remains available."""
@@ -1430,6 +1476,8 @@ class PetWindow(QWidget):
             return
         if self._menu_hold or self._chat_hold:
             return
+        if self.wake_from_sleep():
+            return
         if self._fsm.state in (PetState.FALLING, PetState.CLIMBING, PetState.DRAGGED):
             return
 
@@ -1520,6 +1568,9 @@ class PetWindow(QWidget):
             event.accept()
             return
         if event.button() != Qt.MouseButton.LeftButton:
+            return
+        if not self._click_through and self.wake_from_sleep():
+            event.accept()
             return
         self._drag_pending = True
         self._press_global_pos = event.globalPosition().toPoint()

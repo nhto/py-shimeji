@@ -42,7 +42,7 @@ class _PowerEventFilter(QAbstractNativeEventFilter):
 
 
 class PowerStateWatcher(QObject):
-    """Hide visible pets on system suspend and restore them on resume."""
+    """Hide visible pets on system suspend; show them asleep until clicked on resume."""
 
     def __init__(
         self,
@@ -114,4 +114,5 @@ class PowerStateWatcher(QObject):
         for pet, was_visible in zip(self._pets, self._visibility_snapshot, strict=False):
             if was_visible:
                 pet.show()
+                pet.enter_system_sleep_hold()
         self._visibility_snapshot = []

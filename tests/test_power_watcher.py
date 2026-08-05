@@ -17,6 +17,7 @@ class FakePet:
     visible: bool = True
     show_calls: int = 0
     hide_calls: int = 0
+    sleep_hold_calls: int = 0
 
     def isVisible(self) -> bool:
         return self.visible
@@ -29,6 +30,9 @@ class FakePet:
         self.hide_calls += 1
         self.visible = False
 
+    def enter_system_sleep_hold(self) -> None:
+        self.sleep_hold_calls += 1
+
 
 def _make_watcher(pets: list[FakePet]) -> PowerStateWatcher:
     watcher = PowerStateWatcher([], parent=None)
@@ -38,7 +42,7 @@ def _make_watcher(pets: list[FakePet]) -> PowerStateWatcher:
     return watcher
 
 
-def test_suspend_hides_visible_pets_and_resume_restores() -> None:
+def test_suspend_hides_visible_pets_and_resume_shows_asleep() -> None:
     visible_pet = FakePet(visible=True)
     hidden_pet = FakePet(visible=False)
     watcher = _make_watcher([visible_pet, hidden_pet])
@@ -51,10 +55,12 @@ def test_suspend_hides_visible_pets_and_resume_restores() -> None:
     assert watcher.handle_power_event(PBT_APMRESUMESUSPEND) is True
     assert visible_pet.visible is True
     assert visible_pet.show_calls == 1
+    assert visible_pet.sleep_hold_calls == 1
     assert hidden_pet.show_calls == 0
+    assert hidden_pet.sleep_hold_calls == 0
 
 
-def test_resume_critical_restores_visibility() -> None:
+def test_resume_critical_shows_asleep() -> None:
     pet = FakePet(visible=True)
     watcher = _make_watcher([pet])
 
@@ -64,6 +70,7 @@ def test_resume_critical_restores_visibility() -> None:
     assert watcher.handle_power_event(PBT_APMRESUMECRITICAL) is True
     assert pet.visible is True
     assert pet.show_calls == 1
+    assert pet.sleep_hold_calls == 1
 
 
 def test_unknown_power_event_is_ignored() -> None:
@@ -85,6 +92,7 @@ def test_repeat_suspend_and_resume_are_idempotent() -> None:
     watcher.handle_power_event(PBT_APMRESUMESUSPEND)
     watcher.handle_power_event(PBT_APMRESUMESUSPEND)
     assert pet.show_calls == 1
+    assert pet.sleep_hold_calls == 1
 
 
 def test_set_pets_while_suspended_hides_new_visible_pets() -> None:
@@ -100,4 +108,6 @@ def test_set_pets_while_suspended_hides_new_visible_pets() -> None:
 
     watcher.handle_power_event(PBT_APMRESUMESUSPEND)
     assert pet.visible is True
+    assert pet.sleep_hold_calls == 1
     assert new_pet.visible is False
+    assert new_pet.sleep_hold_calls == 0

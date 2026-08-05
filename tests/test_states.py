@@ -50,6 +50,37 @@ def test_idle_transitions_to_sit_before_walk(qapp) -> None:
 
     machine._on_behavior_tick()
     assert machine.state == PetState.SIT
+    assert machine.sit_until_click is True
+
+
+def test_sit_until_click_does_not_auto_wake(qapp) -> None:
+    machine = PetStateMachine(on_state_changed=lambda *_: None)
+    machine._behavior_timer.stop()
+    machine.begin_sit(until_click=True)
+    machine._next_idle_walk_ms = 0
+
+    machine._on_behavior_tick()
+    assert machine.state == PetState.SIT
+
+
+def test_wake_from_sit_returns_to_idle(qapp) -> None:
+    machine = PetStateMachine(on_state_changed=lambda *_: None)
+    machine._behavior_timer.stop()
+    machine.begin_sit(until_click=True)
+
+    machine.wake_from_sit()
+    assert machine.state == PetState.IDLE
+    assert machine.sit_until_click is False
+
+
+def test_timed_sit_still_auto_wakes(qapp) -> None:
+    machine = PetStateMachine(on_state_changed=lambda *_: None)
+    machine._behavior_timer.stop()
+    machine.begin_sit()
+    machine._next_idle_walk_ms = 100
+
+    machine._on_behavior_tick()
+    assert machine.state == PetState.WALKING
 
 
 def test_paused_skips_behavior_tick(qapp) -> None:
