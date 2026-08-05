@@ -22,6 +22,7 @@ from config import (
 )
 from display import DisplayChangeWatcher
 from pet_window import PetWindow
+from power_watcher import PowerStateWatcher
 from surfaces import SharedSurfaceCoordinator
 from tray import SystemTray
 from weather_monitor import WeatherMonitor
@@ -78,6 +79,10 @@ def main() -> int:
         surface_coordinator=surface_coordinator,
         parent=pets[0] if pets else None,
     )
+    power_watcher = PowerStateWatcher(
+        pets,
+        parent=pets[0] if pets else None,
+    )
 
     clear_chat_context_providers()
     desktop_context = DesktopChatContext(pets, exclude_hwnds=exclude_hwnds)
@@ -110,6 +115,7 @@ def main() -> int:
             pets,
             exclude_hwnds=exclude_hwnds,
             display_watcher=display_watcher,
+            power_watcher=power_watcher,
             surface_coordinator=surface_coordinator,
             outlook_status=outlook_status,
             outlook_monitor=outlook_monitor,
@@ -131,6 +137,7 @@ def main() -> int:
         weather_monitor.start()
 
     def _shutdown_services() -> None:
+        power_watcher.shutdown()
         weather_monitor.shutdown()
         if outlook_monitor is not None:
             outlook_monitor.shutdown()

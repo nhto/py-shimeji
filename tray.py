@@ -106,6 +106,7 @@ if TYPE_CHECKING:
     from display import DisplayChangeWatcher
     from outlook_monitor import OutlookMonitor
     from outlook_status import OutlookStatusManager
+    from power_watcher import PowerStateWatcher
     from weather_monitor import WeatherMonitor
 
 
@@ -144,6 +145,7 @@ class SystemTray:
         *,
         exclude_hwnds: set[int] | None = None,
         display_watcher: DisplayChangeWatcher | None = None,
+        power_watcher: PowerStateWatcher | None = None,
         surface_coordinator: SharedSurfaceCoordinator | None = None,
         outlook_status: OutlookStatusManager | None = None,
         outlook_monitor: OutlookMonitor | None = None,
@@ -153,6 +155,7 @@ class SystemTray:
         self._pets = pets
         self._exclude_hwnds = exclude_hwnds if exclude_hwnds is not None else set()
         self._display_watcher = display_watcher
+        self._power_watcher = power_watcher
         self._surface_coordinator = surface_coordinator
         self._outlook_status = outlook_status
         self._outlook_monitor = outlook_monitor
@@ -747,6 +750,8 @@ class SystemTray:
             self._surface_coordinator.refresh()
         if self._display_watcher is not None:
             self._display_watcher.set_pets(self._pets)
+        if self._power_watcher is not None:
+            self._power_watcher.set_pets(self._pets)
         self._replace_menu()
         self._apply_menu_language()
 
