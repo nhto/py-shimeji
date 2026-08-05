@@ -350,6 +350,11 @@ class WindowEnumerator:
         )
 
 
+def _windows_fingerprint(windows: list[WindowRect]) -> tuple[tuple[int, int, int, int, int], ...]:
+    """Hashable snapshot of visible window geometry for change detection."""
+    return tuple((w.hwnd, w.left, w.top, w.right, w.bottom) for w in windows)
+
+
 class SharedSurfaceCoordinator(QObject):
     """Enumerate desktop windows once per interval and rebuild all pet ledges."""
 
@@ -362,6 +367,7 @@ class SharedSurfaceCoordinator(QObject):
         self._exclude_hwnds = exclude_hwnds
         self._enumerator = WindowEnumerator()
         self._cached_windows: list[WindowRect] = []
+        self._cached_fingerprint: tuple[tuple[int, int, int, int, int], ...] | None = None
         self._pets: list[PetWindow] = []
 
         self._timer = QTimer(self)
@@ -386,7 +392,12 @@ class SharedSurfaceCoordinator(QObject):
 
     def refresh(self) -> None:
         """Scan windows once, then rebuild ledges for every registered pet."""
-        self._cached_windows = self._enumerator.enumerate(self._exclude_hwnds)
+        windows = self._enumerator.enumerate(self._exclude_hwnds)
+        fingerprint = _windows_fingerprint(windows)
+        if fingerprint == self._cached_fingerprint:
+            return
+        self._cached_fingerprint = fingerprint
+        self._cached_windows = windows
         for pet in self._pets:
             pet.rebuild_surfaces_from_cache(self._cached_windows)
 

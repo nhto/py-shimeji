@@ -1398,7 +1398,7 @@ class PetWindow(QWidget):
             return
         if self._fsm.state != PetState.FALLING:
             return
-        self._rebuild_surfaces_from_cache()
+        # Ledges are kept fresh by SharedSurfaceCoordinator (see SURFACE_REFRESH_MS).
         pos = self.pos()
         new_y = pos.y() + get_effective_gravity_px()
         next_feet_y = new_y + self._pet_height - 1
@@ -1448,7 +1448,7 @@ class PetWindow(QWidget):
                         self._fall_exclude_ledge_id = None
 
     def _is_on_support(self) -> bool:
-        self._rebuild_surfaces_from_cache()
+        """Return whether the pet currently rests on a ledge (uses cached ledges)."""
         return self._surfaces.find_ledge_at(self.pos().x(), self.pos().y()) is not None
 
     # ------------------------------------------------------------------
@@ -1538,6 +1538,7 @@ class PetWindow(QWidget):
             return
         if self._motion_paused or self._menu_hold or self._chat_hold:
             return
+        self._rebuild_surfaces_from_cache()
         if self._is_on_support():
             self._fsm.force_state(PetState.IDLE)
         else:
@@ -1622,6 +1623,7 @@ class PetWindow(QWidget):
             event.accept()
             return
         self._fsm.resume()
+        self._rebuild_surfaces_from_cache()
         if self._is_on_support():
             ledge = self._surfaces.find_ledge_at(self.pos().x(), self.pos().y())
             self._active_ledge = ledge

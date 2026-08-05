@@ -49,10 +49,28 @@ from settings.core import format_speech_bubble_text
 TrayNotifier = Callable[[str, str], None]
 _logger = logging.getLogger(__name__)
 _MAX_SEEN_MAIL_IDS = 500
+_MAX_REMINDED_EVENTS = 500
 
 
 def _reminder_key(entry_id: str, minutes: int) -> str:
     return f"{entry_id}|{minutes}"
+
+
+def _prune_reminded_events(
+    reminded: dict[str, bool],
+    active_entry_ids: set[str],
+) -> dict[str, bool]:
+    """Drop reminder keys for meetings no longer in the poll window."""
+    pruned = {
+        key: value
+        for key, value in reminded.items()
+        if key.split("|", 1)[0] in active_entry_ids
+    }
+    if len(pruned) <= _MAX_REMINDED_EVENTS:
+        return pruned
+    # Keep the most recently added keys when over cap (dict preserves insertion order).
+    excess = len(pruned) - _MAX_REMINDED_EVENTS
+    return dict(list(pruned.items())[excess:])
 
 
 def _mail_snooze_key(entry_id: str) -> str:
@@ -406,10 +424,12 @@ class OutlookMonitor(QObject):
 
     def _process_calendar(self, events: list[CalendarEvent]) -> None:
         now = datetime.now()
-        reminded = dict(get_outlook_reminded_events())
+        active_entry_ids = {event.entry_id for event in events}
+        original_reminded = dict(get_outlook_reminded_events())
+        reminded = _prune_reminded_events(original_reminded, active_entry_ids)
         snoozed = dict(get_outlook_snoozed_events())
         thresholds = get_outlook_meeting_reminder_minutes()
-        reminded_changed = False
+        reminded_changed = reminded != original_reminded
         snoozed_changed = False
 
         for key, until_raw in list(snoozed.items()):

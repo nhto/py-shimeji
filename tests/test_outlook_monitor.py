@@ -11,6 +11,7 @@ from outlook_models import CalendarEvent, MailItem
 from outlook_monitor import (
     OutlookMonitor,
     _mail_snooze_key,
+    _prune_reminded_events,
     _reminder_key,
     format_mail_notification,
     format_meeting_notification,
@@ -162,3 +163,21 @@ def test_process_calendar_emits_when_within_threshold(
     assert len(soon) == 1
     assert soon[0][0].entry_id == "evt-42"
     set_reminded.assert_called_once()
+
+
+def test_prune_reminded_events_drops_stale_entry_ids() -> None:
+    reminded = {
+        "old-meeting|15": True,
+        "active-meeting|15": True,
+    }
+    pruned = _prune_reminded_events(reminded, {"active-meeting"})
+    assert pruned == {"active-meeting|15": True}
+
+
+def test_prune_reminded_events_caps_size() -> None:
+    reminded = {f"evt-{index}|15": True for index in range(600)}
+    active = {f"evt-{index}" for index in range(600)}
+    pruned = _prune_reminded_events(reminded, active)
+    assert len(pruned) == 500
+    assert "evt-100|15" in pruned
+    assert "evt-0|15" not in pruned
